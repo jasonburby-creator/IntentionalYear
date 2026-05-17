@@ -204,10 +204,9 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         {readOnly && (
           <div className="readonly-badge">Shared view · {planner.year}</div>
         )}
-        {!readOnly && <button className="tb-btn" onClick={() => setShowSettings(true)}><Settings size={14} /> <span className="btn-text">Categories</span></button>}
+        {!readOnly && <button className="tb-btn" onClick={() => setShowSettings(true)}><Settings size={14} /> <span className="btn-text">Settings</span></button>}
         {!readOnly && <button className="tb-btn" onClick={() => setShowShare(true)}><Share2 size={14} /> <span className="btn-text">Share</span></button>}
         <button className="tb-btn" onClick={() => window.print()}><Printer size={14} /> <span className="btn-text">Print</span></button>
-        {!readOnly && <button className="tb-btn" onClick={exportJSON}><Download size={14} /> <span className="btn-text">Export</span></button>}
 
         <div className="mobile-toggle">
           <button className={mobileView === 'grid' ? 'active' : ''} onClick={() => setMobileViewPersisted('grid')} aria-label="Grid view" title="Year grid"><Grid3x3 size={14} /></button>
@@ -230,15 +229,17 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         <header className="planner-header">
           <div className="title-line">
             <h1 className="title-display">
-              <span className="title-owner">{planner.owner_name}&apos;s</span>{' '}
-              <span className="title-text">{planner.title}</span>
-              <span className="title-sep"> · </span>
-              <span className="title-year">{planner.year}</span>
-              <span className="title-mantra-sep"> — </span>
+              <span className="title-text">{planner.owner_name}&apos;s {planner.title} · {planner.year}</span>
               {planner.mantra ? (
-                <span className="title-mantra">&ldquo;{planner.mantra}&rdquo;</span>
-              ) : (
-                !readOnly && <span className="title-mantra-placeholder">add a mantra</span>
+                <>
+                  <span className="title-mantra-sep"> — </span>
+                  <span className="title-mantra">&ldquo;{planner.mantra}&rdquo;</span>
+                </>
+              ) : !readOnly && (
+                <>
+                  <span className="title-mantra-sep"> — </span>
+                  <span className="title-mantra-placeholder">add a mantra</span>
+                </>
               )}
             </h1>
             {!readOnly && (
@@ -440,6 +441,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
           onUpdate={updateCategory}
           onAdd={addCategory}
           onDelete={deleteCategory}
+          onExport={exportJSON}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -687,19 +689,20 @@ function HeaderEditModal({ planner, onSave, onClose }: {
   );
 }
 
-function CategoriesModal({ categories, onUpdate, onAdd, onDelete, onClose }: {
+function CategoriesModal({ categories, onUpdate, onAdd, onDelete, onExport, onClose }: {
   categories: Category[]; onUpdate: (id: string, patch: Partial<Category>) => void;
-  onAdd: () => void; onDelete: (id: string) => void; onClose: () => void;
+  onAdd: () => void; onDelete: (id: string) => void; onExport: () => void; onClose: () => void;
 }) {
   const lockTooltip = 'Core framework category — name is locked. You can change the color and items.';
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Categories</h2>
+          <h2>Settings</h2>
           <button className="icon-btn" onClick={onClose}><X size={18} /></button>
         </div>
-        <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+        <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          <div className="settings-section-title">Categories</div>
           <div className="modal-note">
             <strong>Misogi, Explore 6x, and Habits</strong> are core framework categories — their names are locked, but you can still change colors and items. The other three are yours to rename, recolor, or remove.
           </div>
@@ -727,6 +730,15 @@ function CategoriesModal({ categories, onUpdate, onAdd, onDelete, onClose }: {
             );
           })}
           <button className="btn" onClick={onAdd}><Plus size={14} /> Add category</button>
+
+          <div className="settings-divider" />
+          <div className="settings-section-title">Data</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <button className="btn" onClick={onExport}><Download size={14} /> Export as JSON</button>
+            <div style={{ fontSize: 11, color: '#7a7064', lineHeight: 1.5, paddingTop: 2 }}>
+              Download a backup of your planner — all entries, categories, and settings — as a JSON file.
+            </div>
+          </div>
         </div>
         <div className="modal-footer">
           <div />
@@ -899,19 +911,17 @@ const styles = `
 .title-display {
   font-family: 'Fraunces', serif;
   font-weight: 700;
-  font-size: clamp(20px, 2.6vw, 30px);
+  font-size: clamp(20px, 2.6vw, 28px);
   line-height: 1.25;
   letter-spacing: -0.01em;
   margin: 0;
   color: var(--ink);
   font-variation-settings: 'opsz' 144;
+  font-style: normal;
 }
 
-.title-owner { font-weight: 600; }
-.title-text { font-style: italic; font-weight: 700; }
-.title-sep, .title-mantra-sep { color: var(--ink-mute); font-weight: 400; }
-.title-mantra-sep { color: var(--rule); font-weight: 300; padding: 0 4px; }
-.title-year { font-weight: 600; font-variant-numeric: tabular-nums; }
+.title-text { color: var(--ink); }
+.title-mantra-sep { color: var(--rule); font-weight: 400; padding: 0 4px; }
 .title-mantra { font-style: italic; font-weight: 400; color: var(--ink-soft); }
 .title-mantra-placeholder { font-style: italic; font-weight: 400; color: var(--ink-mute); opacity: 0.5; }
 
@@ -1061,6 +1071,8 @@ const styles = `
 .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 .modal-note { font-size: 12px; line-height: 1.5; color: var(--ink-soft); background: rgba(255,255,255,0.5); border-left: 2px solid var(--accent); padding: 10px 12px; border-radius: 0 3px 3px 0; margin-bottom: 4px; }
 .modal-note strong { color: var(--ink); font-weight: 600; }
+.settings-section-title { font-family: 'Fraunces', serif; font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 4px; letter-spacing: -0.005em; text-transform: uppercase; letter-spacing: 0.05em; }
+.settings-divider { height: 1px; background: var(--rule); margin: 8px 0 4px; }
 .cross-month-note { font-size: 12px; line-height: 1.4; color: var(--ink-soft); background: rgba(184, 138, 63, 0.1); border-left: 2px solid #b88a3f; padding: 8px 10px; border-radius: 0 3px 3px 0; }
 .cross-month-note strong { color: var(--ink); font-weight: 600; }
 
@@ -1119,10 +1131,10 @@ const styles = `
 }
 
 /* ============================================================
-   PRINT — single-page tabloid landscape
+   PRINT — single-page tabloid landscape, fills full page
    ============================================================ */
 @media print {
-  @page { size: 17in 11in; margin: 0.4in; }
+  @page { size: 17in 11in; margin: 0.35in; }
 
   /* Hide all chrome */
   .toolbar, .mobile-toggle, .scroll-hint, .planner-footer,
@@ -1132,54 +1144,70 @@ const styles = `
   .grid-wrap.mobile-hide { display: block !important; }
   .screen-only { display: none !important; }
 
-  html, body { height: 100%; margin: 0; padding: 0; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+  }
 
   .planner-root {
     background: white;
+    height: 100vh;
     min-height: 0;
-    height: auto;
+    overflow: hidden;
   }
   .planner-root::before { display: none; }
 
   .printable {
     padding: 0;
     max-width: none;
+    margin: 0;
     width: 100%;
     height: 100vh;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    box-sizing: border-box;
   }
 
-  /* Streamlined header — one tight line */
+  /* Streamlined header — one tight line, fixed height */
   .planner-header {
     margin: 0 0 6px;
     padding-bottom: 6px;
-    border-bottom: 1px solid var(--rule);
-    flex-shrink: 0;
+    border-bottom: 1px solid #c9bfa8;
+    flex: 0 0 auto;
   }
   .title-line { gap: 4px; }
   .title-display {
-    font-size: 14px !important;
+    font-size: 13px !important;
     line-height: 1.2 !important;
     flex-wrap: nowrap;
   }
 
-  /* Calendar takes the bulk of the page */
-  .calendar-grid {
-    border-color: #999;
-    box-shadow: none;
-    flex: 1;
+  /* Calendar takes ALL available remaining height */
+  .grid-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
-  .month-row {
+  .calendar-grid {
+    border-color: #999;
+    box-shadow: none;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     min-height: 0;
-    flex: 1;
+    border-radius: 0;
+  }
+  .month-row {
+    min-height: 0 !important;
+    flex: 1 1 0;
     border-bottom-color: #ccc;
   }
+  .month-row:last-child { border-bottom: none; }
   .month-label {
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.1em;
   }
   .day-cell {
@@ -1188,14 +1216,14 @@ const styles = `
     padding: 1px;
   }
   .day-number {
-    font-size: 6.5px;
-    top: 1px;
-    left: 2px;
+    font-size: 7px;
+    top: 2px;
+    left: 3px;
   }
   .entry-bar {
-    font-size: 7px !important;
-    height: 12px !important;
-    line-height: 12px !important;
+    font-size: 8px !important;
+    height: 14px !important;
+    line-height: 14px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     box-shadow: none !important;
@@ -1205,18 +1233,16 @@ const styles = `
     print-color-adjust: exact;
   }
 
-  /* Compact legend strip at the bottom (names + items only — no descriptions) */
+  /* Compact legend strip at the bottom — fixed height */
   .legend {
-    margin-top: 6px;
-    flex-shrink: 0;
-  }
-  .legend-rule, .legend-title-bar { display: none; }
-  .legend {
+    margin: 6px 0 0;
+    flex: 0 0 auto;
     padding-top: 6px;
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid #c9bfa8;
   }
+  .legend-rule, .legend-title-bar { display: none !important; }
   .legend-grid {
-    gap: 10px;
+    gap: 12px;
     grid-template-columns: repeat(6, 1fr) !important;
   }
   .legend-swatch {
@@ -1225,7 +1251,12 @@ const styles = `
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .legend-header { gap: 5px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid var(--rule-soft); }
+  .legend-header {
+    gap: 5px;
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #e0d7c0;
+  }
   .legend-name, .legend-name-static {
     font-size: 10px !important;
   }
@@ -1233,8 +1264,9 @@ const styles = `
     font-size: 7.5px !important;
     line-height: 1.4 !important;
     min-height: 0 !important;
-    color: var(--accent);
+    color: #8a3a2a;
   }
+  .legend-category { gap: 2px; }
 
   /* Hide editing affordances on print */
   .lock-mark { display: none !important; }
