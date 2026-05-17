@@ -10,6 +10,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const patch: Record<string, unknown> = {};
   if (typeof body.title === 'string') patch.title = body.title;
   if (typeof body.owner_name === 'string') patch.owner_name = body.owner_name;
+  if (typeof body.mantra === 'string') patch.mantra = body.mantra;
   if (body.share_token !== undefined) patch.share_token = body.share_token;
 
   const { data, error } = await supabase

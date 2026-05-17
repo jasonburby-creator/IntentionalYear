@@ -22,7 +22,7 @@ export default async function HomePage({ searchParams }: { searchParams: { year?
     const ownerName = (user.user_metadata?.full_name || user.email?.split('@')[0] || 'YOU').toUpperCase().split(' ')[0];
     const { data: created } = await supabase
       .from('planners')
-      .insert({ user_id: user.id, year, owner_name: ownerName, title: 'LIVE YOUR ADVENTURE' })
+      .insert({ user_id: user.id, year, owner_name: ownerName, title: 'INTENTIONAL YEAR', mantra: '' })
       .select('*')
       .single();
     planner = created;
