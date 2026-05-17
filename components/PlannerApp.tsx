@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Download, Printer, Trash2, X, ChevronLeft, ChevronRight, Settings, Share2, LogOut, Link as LinkIcon, Check, Grid3x3, List } from 'lucide-react';
+import NextLink from 'next/link';
+import { Plus, Download, Printer, Trash2, X, ChevronLeft, ChevronRight, Settings, Share2, LogOut, Link as LinkIcon, Check, Grid3x3, List, Info } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { type Planner, type Category, type Entry, MONTHS, MONTHS_FULL, daysInMonth, isCoreCategory } from '@/lib/types';
 
@@ -178,6 +179,12 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         </div>
 
         {!readOnly && (
+          <NextLink href="/about" className="tb-btn about-link" title="About this tool">
+            <Info size={14} /> <span className="btn-text">About</span>
+          </NextLink>
+        )}
+
+        {!readOnly && (
           <button className="tb-btn signout" onClick={signOut} title={userEmail}>
             <LogOut size={14} /> <span className="btn-text">Sign out</span>
           </button>
@@ -195,7 +202,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                   className="overline-input"
                   value={planner.owner_name}
                   onChange={e => updatePlannerField({ owner_name: e.target.value.toUpperCase() })}
-                  style={{ width: `${Math.max(planner.owner_name.length, 3)}ch` }}
+                  style={{ width: `${Math.max(planner.owner_name.length, 3) + 1}ch` }}
                   spellCheck={false}
                 />
                 <span>&apos;S </span>
@@ -203,7 +210,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                   className="overline-input"
                   value={planner.title}
                   onChange={e => updatePlannerField({ title: e.target.value.toUpperCase() })}
-                  style={{ width: `${Math.max(planner.title.length, 10)}ch` }}
+                  style={{ width: `${Math.max(planner.title.length, 10) + 1}ch` }}
                   spellCheck={false}
                 />
               </>
@@ -649,9 +656,10 @@ const styles = `
   font-size: 12px; font-weight: 500; letter-spacing: 0.02em;
   color: var(--ink); cursor: pointer; transition: all 0.15s;
   font-family: inherit;
+  text-decoration: none;
 }
 .tb-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.signout { margin-left: auto; }
+.about-link { margin-left: auto; }
 
 .year-control {
   display: inline-flex; align-items: center; gap: 2px;
@@ -668,22 +676,22 @@ const styles = `
 .mobile-toggle button { padding: 5px 8px; background: transparent; border: none; border-radius: 3px; cursor: pointer; color: var(--ink-mute); display: inline-flex; align-items: center; }
 .mobile-toggle button.active { background: var(--ink); color: var(--paper); }
 
-.printable { position: relative; z-index: 1; padding: 40px 32px 60px; max-width: 1600px; margin: 0 auto; }
+.printable { position: relative; z-index: 1; padding: 28px 32px 60px; max-width: 1600px; margin: 0 auto; }
 
-.planner-header { text-align: center; margin-bottom: 48px; padding-bottom: 24px; position: relative; }
+.planner-header { text-align: center; margin-bottom: 32px; padding-bottom: 18px; position: relative; }
 .planner-header::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 80px; height: 1px; background: var(--ink-soft); }
 
-.overline { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 8px; }
+.overline { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 8px; max-width: 100%; overflow: visible; line-height: 1.5; }
 .overline-input { font: inherit; color: inherit; background: transparent; border: none; border-bottom: 1px dashed transparent; padding: 0 2px; text-transform: uppercase; text-align: center; letter-spacing: inherit; }
 .overline-input:hover, .overline-input:focus { border-bottom-color: var(--rule); outline: none; color: var(--ink); }
 
 .display-year {
   font-family: 'Fraunces', serif;
   font-weight: 800;
-  font-size: clamp(64px, 12vw, 160px);
+  font-size: clamp(44px, 7vw, 88px);
   line-height: 0.95;
   letter-spacing: -0.04em;
-  margin: 4px 0 16px;
+  margin: 2px 0 12px;
   color: var(--ink);
   font-variation-settings: 'opsz' 144;
 }
@@ -844,7 +852,8 @@ const styles = `
   .printable { padding: 24px 16px 40px; }
   .mobile-toggle { display: inline-flex; }
   .btn-text { display: none; }
-  .signout { margin-left: auto; }
+  .signout, .about-link { margin-left: 0; }
+  .about-link { margin-left: auto; }
 
   .grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px; }
   .calendar-grid { min-width: 1100px; }
