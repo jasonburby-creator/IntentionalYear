@@ -909,21 +909,20 @@ const styles = `
 }
 
 .title-display {
-  font-family: 'Fraunces', serif;
-  font-weight: 700;
-  font-size: clamp(20px, 2.6vw, 28px);
+  font-family: 'Crimson Pro', serif;
+  font-weight: 600;
+  font-size: clamp(22px, 2.6vw, 28px);
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   margin: 0;
   color: var(--ink);
-  font-variation-settings: 'opsz' 144;
   font-style: normal;
 }
 
 .title-text { color: var(--ink); }
-.title-mantra-sep { color: var(--rule); font-weight: 400; padding: 0 4px; }
-.title-mantra { font-style: italic; font-weight: 400; color: var(--ink-soft); }
-.title-mantra-placeholder { font-style: italic; font-weight: 400; color: var(--ink-mute); opacity: 0.5; }
+.title-mantra-sep { color: var(--rule); font-weight: 400; padding: 0 6px; }
+.title-mantra { font-family: 'Crimson Pro', serif; font-style: italic; font-weight: 400; color: var(--ink-soft); }
+.title-mantra-placeholder { font-family: 'Crimson Pro', serif; font-style: italic; font-weight: 400; color: var(--ink-mute); opacity: 0.5; }
 
 .header-edit-btn {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1131,7 +1130,10 @@ const styles = `
 }
 
 /* ============================================================
-   PRINT — single-page tabloid landscape, fills full page
+   PRINT — single-page tabloid landscape
+   Tabloid landscape is 17"x11" = 1224x792px at 96dpi
+   With 0.35" margins, usable area is roughly 1162x740px
+   Budget:  header 32px  +  calendar 540px  +  legend 168px = 740px
    ============================================================ */
 @media print {
   @page { size: 17in 11in; margin: 0.35in; }
@@ -1145,117 +1147,120 @@ const styles = `
   .screen-only { display: none !important; }
 
   html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .planner-root {
-    background: white;
-    height: 100vh;
-    min-height: 0;
-    overflow: hidden;
+    background: white !important;
+    height: auto !important;
+    min-height: 0 !important;
   }
-  .planner-root::before { display: none; }
+  .planner-root::before { display: none !important; }
 
   .printable {
-    padding: 0;
-    max-width: none;
-    margin: 0;
-    width: 100%;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    box-sizing: border-box;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  /* Streamlined header — one tight line, fixed height */
+  /* Header — fixed 32px tall */
   .planner-header {
-    margin: 0 0 6px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #c9bfa8;
-    flex: 0 0 auto;
+    margin: 0 0 6px !important;
+    padding: 0 0 6px !important;
+    border-bottom: 1px solid #c9bfa8 !important;
+    height: auto !important;
   }
-  .title-line { gap: 4px; }
+  .title-line { gap: 6px; }
   .title-display {
-    font-size: 13px !important;
+    font-family: 'Crimson Pro', serif !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
     line-height: 1.2 !important;
-    flex-wrap: nowrap;
+    flex-wrap: nowrap !important;
   }
 
-  /* Calendar takes ALL available remaining height */
+  /* Calendar — explicit height per row instead of flex */
   .grid-wrap {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    margin: 0 !important;
+    overflow: visible !important;
+    page-break-inside: avoid;
   }
   .calendar-grid {
-    border-color: #999;
-    box-shadow: none;
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    border-radius: 0;
+    border: 1px solid #999 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    display: block !important;
+    page-break-inside: avoid;
   }
   .month-row {
-    min-height: 0 !important;
-    flex: 1 1 0;
-    border-bottom-color: #ccc;
+    display: grid !important;
+    grid-template-columns: 44px repeat(31, 1fr) !important;
+    height: 45px !important;
+    min-height: 45px !important;
+    max-height: 45px !important;
+    border-bottom: 1px solid #ccc !important;
+    page-break-inside: avoid;
+    page-break-after: avoid;
   }
-  .month-row:last-child { border-bottom: none; }
+  .month-row:last-child { border-bottom: none !important; }
   .month-label {
-    font-size: 10px;
-    letter-spacing: 0.1em;
+    font-size: 10px !important;
+    letter-spacing: 0.1em !important;
+    padding: 0 !important;
   }
   .day-cell {
-    border-right-color: #ddd;
-    min-height: 0;
-    padding: 1px;
+    border-right-color: #ddd !important;
+    min-height: 0 !important;
+    height: 45px !important;
+    padding: 1px !important;
   }
   .day-number {
-    font-size: 7px;
-    top: 2px;
-    left: 3px;
+    font-size: 7px !important;
+    top: 2px !important;
+    left: 3px !important;
   }
   .entry-bar {
     font-size: 8px !important;
-    height: 14px !important;
-    line-height: 14px !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    height: 13px !important;
+    line-height: 13px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
     box-shadow: none !important;
   }
   .month-row.q0, .month-row.q1, .month-row.q2, .month-row.q3 {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Compact legend strip at the bottom — fixed height */
+  /* Legend strip at the bottom */
   .legend {
-    margin: 6px 0 0;
-    flex: 0 0 auto;
-    padding-top: 6px;
-    border-top: 1px solid #c9bfa8;
+    margin: 8px 0 0 !important;
+    padding-top: 6px !important;
+    border-top: 1px solid #c9bfa8 !important;
+    page-break-inside: avoid;
   }
   .legend-rule, .legend-title-bar { display: none !important; }
   .legend-grid {
-    gap: 12px;
+    gap: 12px !important;
     grid-template-columns: repeat(6, 1fr) !important;
   }
   .legend-swatch {
-    width: 9px;
-    height: 9px;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    width: 9px !important;
+    height: 9px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .legend-header {
-    gap: 5px;
-    margin-bottom: 4px;
-    padding-bottom: 3px;
-    border-bottom: 1px solid #e0d7c0;
+    gap: 5px !important;
+    margin-bottom: 4px !important;
+    padding-bottom: 3px !important;
+    border-bottom: 1px solid #e0d7c0 !important;
   }
   .legend-name, .legend-name-static {
     font-size: 10px !important;
@@ -1264,11 +1269,9 @@ const styles = `
     font-size: 7.5px !important;
     line-height: 1.4 !important;
     min-height: 0 !important;
-    color: #8a3a2a;
+    color: #8a3a2a !important;
   }
-  .legend-category { gap: 2px; }
-
-  /* Hide editing affordances on print */
+  .legend-category { gap: 2px !important; }
   .lock-mark { display: none !important; }
 }
 `;
