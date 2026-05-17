@@ -37,6 +37,15 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
     if (saved === 'grid' || saved === 'list') setMobileView(saved);
   }, []);
 
+  // Auto-resize all legend textareas whenever categories change
+  useEffect(() => {
+    const textareas = document.querySelectorAll<HTMLTextAreaElement>('.legend-desc, .legend-items');
+    textareas.forEach(ta => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+  }, [categories]);
+
   function setMobileViewPersisted(v: MobileView) {
     setMobileView(v);
     try { window.localStorage.setItem('mobileView', v); } catch {}
@@ -257,56 +266,119 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
 
         <div className={`grid-wrap ${mobileView === 'list' ? 'mobile-hide' : ''}`}>
           <div className="calendar-grid">
-            {MONTHS.map((m, mi) => {
-              const maxDay = daysInMonth(planner.year, mi);
-              const quarter = Math.floor(mi / 3);
-              const monthEntries = getEntriesForMonth(mi);
-              return (
-                <div className={`month-row q${quarter}`} key={mi}>
-                  <div className="month-label">{m}</div>
-                  {Array.from({ length: 31 }, (_, di) => {
-                    const day = di + 1;
-                    const valid = day <= maxDay;
-                    return (
-                      <div
-                        key={di}
-                        className={`day-cell${!valid ? ' invalid' : ''}${readOnly ? ' readonly' : ''}`}
-                        onClick={() => !readOnly && valid && setAddingFor({ month: mi, day })}
-                        onDragOver={e => { if (valid && !readOnly) e.preventDefault(); }}
-                        onDrop={e => { e.preventDefault(); if (valid && !readOnly) handleDrop(mi, day); }}
-                      >
-                        {valid && <div className="day-number">{day}</div>}
-                      </div>
-                    );
-                  })}
+            {(() => {
+              const today = new Date();
+              const todayYear = today.getFullYear();
+              const todayMonth = today.getMonth();
+              const todayDay = today.getDate();
+              const isCurrentYear = planner.year === todayYear;
 
-                  {/* Render entries as positioned bars, centered text, with row collision detection */}
-                  {(() => {
-                    // Assign each entry a row index that avoids collision with prior entries
-                    const placed: { row: number; start: number; end: number }[] = [];
-                    return monthEntries.map((entry) => {
-                      let row = 0;
-                      while (placed.some(p => p.row === row && !(entry.end_day < p.start || entry.start_day > p.end))) {
-                        row++;
-                      }
-                      placed.push({ row, start: entry.start_day, end: entry.end_day });
-                      const cat = categories.find(c => c.id === entry.category_id) || null;
+              // Parse quarter habits from the Habits category items
+              // Expected format: "Q1 — Daily Sun Salutations" or "Q1 - NSNG"
+              const habitsCategory = categories.find(c => c.name === 'Habits');
+              const habitItems = habitsCategory?.items || [];
+              const quarterHabits: Record<number, string> = {};
+              habitItems.filter(Boolean).forEach(item => {
+                const match = item.match(/^Q([1-4])\s*[—\-–]\s*(.+)$/i);
+                if (match) quarterHabits[parseInt(match[1])] = match[2].trim();
+              });
+
+              const rows: React.ReactNode[] = [];
+
+              MONTHS.forEach((m, mi) => {
+                const maxDay = daysInMonth(planner.year, mi);
+                const quarter = Math.floor(mi / 3);
+                const quarterNum = quarter + 1;
+                const monthEntries = getEntriesForMonth(mi);
+
+                // Insert quarter divider at the start of each quarter
+                if (mi % 3 === 0) {
+                  const habitLabel = quarterHabits[quarterNum] || 'TBD';
+                  const qStyles = [
+                    { bg: 'var(--q-div-bg-1)', border: 'var(--q-div-border-1)', text: 'var(--q-div-text-1)', dot: 'var(--q-div-dot-1)' },
+                    { bg: 'var(--q-div-bg-2)', border: 'var(--q-div-border-2)', text: 'var(--q-div-text-2)', dot: 'var(--q-div-dot-2)' },
+                    { bg: 'var(--q-div-bg-3)', border: 'var(--q-div-border-3)', text: 'var(--q-div-text-3)', dot: 'var(--q-div-dot-3)' },
+                    { bg: 'var(--q-div-bg-4)', border: 'var(--q-div-border-4)', text: 'var(--q-div-text-4)', dot: 'var(--q-div-dot-4)' },
+                  ][quarter];
+
+                  rows.push(
+                    <div key={`qdiv-${mi}`}
+                      className="quarter-divider"
+                      style={{
+                        background: qStyles.bg,
+                        borderColor: qStyles.border,
+                        color: qStyles.text,
+                      }}
+                    >
+                      <div className="quarter-divider-dot" style={{ background: qStyles.dot }} />
+                      <div className="quarter-divider-label" style={{ color: qStyles.text }}>
+                        Q{quarterNum} Habit — {habitLabel}
+                      </div>
+                    </div>
+                  );
+                }
+
+                rows.push(
+                  <div className={`month-row q${quarter}`} key={mi}>
+                    <div className="month-label">{m}</div>
+                    {Array.from({ length: 31 }, (_, di) => {
+                      const day = di + 1;
+                      const valid = day <= maxDay;
+                      const isToday = !readOnly && isCurrentYear && mi === todayMonth && day === todayDay;
                       return (
-                        <EntryBar
-                          key={entry.id}
-                          entry={entry}
-                          category={cat}
-                          row={row}
-                          readOnly={readOnly}
-                          onDragStart={() => setDraggedEntry(entry)}
-                          onClick={() => !readOnly && setEditingEntry(entry)}
-                        />
+                        <div
+                          key={di}
+                          className={[
+                            'day-cell',
+                            !valid ? 'invalid' : '',
+                            readOnly ? 'readonly' : '',
+                            isToday ? 'today' : '',
+                          ].filter(Boolean).join(' ')}
+                          onClick={() => !readOnly && valid && setAddingFor({ month: mi, day })}
+                          onDragOver={e => { if (valid && !readOnly) e.preventDefault(); }}
+                          onDrop={e => { e.preventDefault(); if (valid && !readOnly) handleDrop(mi, day); }}
+                        >
+                          {valid && (
+                            <div className={`day-number${isToday ? ' today-num' : ''}`}>{day}</div>
+                          )}
+                        </div>
                       );
-                    });
-                  })()}
-                </div>
-              );
-            })}
+                    })}
+
+                    {/* Entries with collision detection + can-wrap logic */}
+                    {(() => {
+                      const placed: { row: number; start: number; end: number }[] = [];
+                      return monthEntries.map((entry) => {
+                        let row = 0;
+                        while (placed.some(p => p.row === row && !(entry.end_day < p.start || entry.start_day > p.end))) {
+                          row++;
+                        }
+                        placed.push({ row, start: entry.start_day, end: entry.end_day });
+                        const cat = categories.find(c => c.id === entry.category_id) || null;
+                        const span = entry.end_day - entry.start_day + 1;
+                        // Can wrap if: 1-2 day span AND nothing else on row 0 overlapping it
+                        const hasOverlapOnSameRows = placed.filter(p => p.row === row).length > 1;
+                        const canWrap = span <= 2 && row === 0 && !hasOverlapOnSameRows;
+                        return (
+                          <EntryBar
+                            key={entry.id}
+                            entry={entry}
+                            category={cat}
+                            row={row}
+                            canWrap={canWrap}
+                            readOnly={readOnly}
+                            onDragStart={() => setDraggedEntry(entry)}
+                            onClick={() => !readOnly && setEditingEntry(entry)}
+                          />
+                        );
+                      });
+                    })()}
+                  </div>
+                );
+              });
+
+              return rows;
+            })()}
           </div>
           <div className="scroll-hint">← swipe to see the whole year →</div>
         </div>
@@ -397,7 +469,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                       {(cat.items || []).filter(Boolean).map((it, i) => <div key={i}>• {it}</div>)}
                     </div>
                   ) : (
-                    <textarea className="legend-items" placeholder="Items, one per line…" value={(cat.items || []).join('\n')} onChange={e => updateCategory(cat.id, { items: e.target.value.split('\n') })} />
+                    <textarea className="legend-items" placeholder="Items, one per line…" value={(cat.items || []).join('\n')} onChange={e => updateCategory(cat.id, { items: e.target.value.split('\n') })} onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }} />
                   )}
                 </div>
               );
@@ -466,10 +538,11 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
 }
 
 // ---- Entry bar — single row position, centered text, spans across days ----
-function EntryBar({ entry, category, row, readOnly, onDragStart, onClick }: {
+function EntryBar({ entry, category, row, canWrap, readOnly, onDragStart, onClick }: {
   entry: Entry;
   category: Category | null;
   row: number;
+  canWrap: boolean;
   readOnly: boolean;
   onDragStart: () => void;
   onClick: () => void;
@@ -482,7 +555,7 @@ function EntryBar({ entry, category, row, readOnly, onDragStart, onClick }: {
 
   return (
     <div
-      className="entry-bar"
+      className={`entry-bar${canWrap ? ' can-wrap' : ''}`}
       style={{
         position: 'absolute',
         left, width, top,
@@ -825,13 +898,21 @@ const styles = `
   --rule: #c9bfa8;
   --rule-soft: #e0d7c0;
   --accent: #8a3a2a;
-  --q-tint-1: rgba(200, 175, 130, 0.07);
-  --q-tint-2: rgba(150, 120, 80, 0.05);
-  --q-tint-3: rgba(120, 145, 110, 0.06);
-  --q-tint-4: rgba(140, 110, 95, 0.07);
+  --today: #c2553c;
+  /* Quarter tints — all equally visible */
+  --q-tint-1: rgba(184, 138, 63, 0.10);
+  --q-tint-2: rgba(91, 122, 58, 0.10);
+  --q-tint-3: rgba(61, 107, 135, 0.10);
+  --q-tint-4: rgba(160, 100, 80, 0.10);
+  /* Quarter divider accent colors */
+  --q-div-bg-1: #f5edda; --q-div-border-1: #d4b87a; --q-div-text-1: #7a5c1e; --q-div-dot-1: #b88a3f;
+  --q-div-bg-2: #e8f0e2; --q-div-border-2: #8ab07a; --q-div-text-2: #2a5c1e; --q-div-dot-2: #5b7a3a;
+  --q-div-bg-3: #e2ecf5; --q-div-border-3: #7aaad4; --q-div-text-3: #1e3a5c; --q-div-dot-3: #3d6b87;
+  --q-div-bg-4: #f5e8e2; --q-div-border-4: #d4907a; --q-div-text-4: #5c2a1e; --q-div-dot-4: #c2553c;
   --month-label-w: 56px;
-  --cell-top-padding: 14px;
+  --cell-top-padding: 16px;
   --pill-stack: 16px;
+  --row-height: 64px;
 }
 
 .planner-root {
@@ -953,7 +1034,7 @@ const styles = `
   display: grid;
   grid-template-columns: var(--month-label-w) repeat(31, minmax(0, 1fr));
   border-bottom: 1px solid var(--rule-soft);
-  min-height: 56px;
+  min-height: var(--row-height);
   position: relative;
 }
 .month-row:last-child { border-bottom: none; }
@@ -973,11 +1054,13 @@ const styles = `
 
 .day-cell {
   position: relative; border-right: 1px solid rgba(201, 191, 168, 0.4);
-  padding: 2px; min-height: 56px; cursor: pointer; transition: background 0.1s;
+  padding: 2px; min-height: var(--row-height); cursor: pointer; transition: background 0.1s;
 }
 .day-cell.readonly { cursor: default; }
 .day-cell:last-child { border-right: none; }
 .day-cell:not(.readonly):hover { background: rgba(255,255,255,0.5); }
+.day-cell.today { box-shadow: inset 0 0 0 2px var(--today); }
+.day-number.today-num { color: var(--today); font-weight: 700; }
 .day-cell.invalid {
   background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(201,191,168,0.15) 4px, rgba(201,191,168,0.15) 5px), var(--paper-deep);
   cursor: not-allowed;
@@ -1011,6 +1094,23 @@ const styles = `
   width: 100%;
   text-align: center;
 }
+/* Multi-line wrapping for short single/two-day entries with no overlap */
+.entry-bar.can-wrap {
+  height: auto;
+  min-height: 14px;
+  max-height: 42px;
+  line-height: 1.15;
+  padding: 3px 5px;
+  align-items: flex-start;
+}
+.entry-bar.can-wrap .entry-bar-label {
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  text-align: center;
+}
 
 .scroll-hint { display: none; text-align: center; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 10px; font-weight: 500; }
 
@@ -1034,6 +1134,28 @@ const styles = `
 .row-pill { font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 3px; letter-spacing: 0.01em; }
 .row-pill-cont { opacity: 0.7; font-weight: 400; font-style: italic; }
 
+/* ---- Quarter habit dividers ---- */
+.quarter-divider {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 18px;
+  padding: 0 8px 0 10px;
+  border-top: 1px solid;
+  border-bottom: 1px solid;
+}
+.quarter-divider-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.quarter-divider-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 /* ---- Legend ---- */
 .legend { margin-top: 36px; }
 .legend-rule { height: 1px; background: var(--ink-soft); margin-bottom: 20px; position: relative; }
@@ -1053,10 +1175,10 @@ const styles = `
 .lock-mark { font-size: 8px; color: var(--accent); letter-spacing: 0.1em; font-weight: 600; opacity: 0.7; }
 .legend-name:focus { outline: 1px dashed var(--rule); outline-offset: 2px; }
 
-.legend-desc, .legend-desc-static { font-size: 11px; color: var(--ink-soft); line-height: 1.5; background: transparent; border: none; padding: 0; resize: vertical; font-family: inherit; width: 100%; min-height: 54px; }
+.legend-desc, .legend-desc-static { font-size: 11px; color: var(--ink-soft); line-height: 1.5; background: transparent; border: none; padding: 0; resize: none; font-family: inherit; width: 100%; min-height: 0; overflow: hidden; }
 .legend-desc:focus { outline: 1px dashed var(--rule); outline-offset: 2px; }
 
-.legend-items, .legend-items-static { font-size: 11px; color: var(--accent); line-height: 1.55; background: transparent; border: none; padding: 0; resize: vertical; font-family: inherit; width: 100%; min-height: 84px; white-space: pre-wrap; font-weight: 500; }
+.legend-items, .legend-items-static { font-size: 11px; color: var(--accent); line-height: 1.55; background: transparent; border: none; padding: 0; resize: none; font-family: inherit; width: 100%; min-height: 0; overflow: hidden; white-space: pre-wrap; font-weight: 500; }
 .legend-items:focus { outline: 1px dashed var(--rule); outline-offset: 2px; }
 
 .planner-footer { margin-top: 56px; text-align: center; border-top: 1px solid var(--rule); padding-top: 20px; }
@@ -1110,8 +1232,19 @@ const styles = `
   .btn-text { display: none; }
   .about-link { margin-left: auto; }
 
-  .title-display { font-size: 18px; }
-  .header-edit-btn { padding: 4px 8px; }
+  .title-display {
+    font-size: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .title-mantra, .title-mantra-sep, .title-mantra-placeholder {
+    display: block;
+    width: 100%;
+    text-align: center;
+    margin-top: 4px;
+    font-size: 14px;
+  }
+  .title-mantra-sep { display: none; }
 
   .grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px; }
   .calendar-grid { min-width: 1100px; }
@@ -1180,12 +1313,29 @@ const styles = `
   .title-display {
     font-family: 'Crimson Pro', serif !important;
     font-weight: 600 !important;
-    font-size: 14px !important;
+    font-size: 22px !important;
     line-height: 1.2 !important;
     flex-wrap: nowrap !important;
   }
 
-  /* Calendar — explicit height per row instead of flex */
+  /* Quarter dividers — show on print, just smaller */
+  .quarter-divider {
+    height: 14px !important;
+    padding: 0 6px 0 8px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .quarter-divider-dot {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .quarter-divider-label { font-size: 7px !important; letter-spacing: 0.14em !important; }
+
+  /* Today highlight — off for print */
+  .day-cell.today { box-shadow: none !important; }
+  .day-number.today-num { color: #7a7064 !important; font-weight: 600 !important; }
+
+  /* Calendar — explicit 36px rows (Option A) */
   .grid-wrap {
     margin: 0 !important;
     overflow: visible !important;
@@ -1201,9 +1351,9 @@ const styles = `
   .month-row {
     display: grid !important;
     grid-template-columns: 44px repeat(31, 1fr) !important;
-    height: 45px !important;
-    min-height: 45px !important;
-    max-height: 45px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
     border-bottom: 1px solid #ccc !important;
     page-break-inside: avoid;
     page-break-after: avoid;
@@ -1217,7 +1367,7 @@ const styles = `
   .day-cell {
     border-right-color: #ddd !important;
     min-height: 0 !important;
-    height: 45px !important;
+    height: 36px !important;
     padding: 1px !important;
   }
   .day-number {
@@ -1226,13 +1376,14 @@ const styles = `
     left: 3px !important;
   }
   .entry-bar {
-    font-size: 8px !important;
-    height: 13px !important;
-    line-height: 13px !important;
+    font-size: 7.5px !important;
+    height: 11px !important;
+    line-height: 11px !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     box-shadow: none !important;
   }
+  .entry-bar.can-wrap { height: 11px !important; max-height: 11px !important; }
   .month-row.q0, .month-row.q1, .month-row.q2, .month-row.q3 {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
