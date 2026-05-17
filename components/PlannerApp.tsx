@@ -193,30 +193,36 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
 
       <div className="printable">
         <header className="planner-header">
-          <div className="overline">
+          <div className="title-line">
             {readOnly ? (
-              <span>{planner.owner_name}&apos;S {planner.title.toUpperCase()}</span>
+              <h1 className="title-display">
+                <span className="title-owner">{planner.owner_name}&apos;s</span>{' '}
+                <span className="title-text">{planner.title}</span>
+                <span className="title-sep">·</span>
+                <span className="title-year">{planner.year}</span>
+              </h1>
             ) : (
-              <>
+              <h1 className="title-display">
                 <input
-                  className="overline-input"
+                  className="title-input title-owner"
                   value={planner.owner_name}
-                  onChange={e => updatePlannerField({ owner_name: e.target.value.toUpperCase() })}
+                  onChange={e => updatePlannerField({ owner_name: e.target.value })}
                   style={{ width: `${Math.max(planner.owner_name.length, 3) + 1}ch` }}
                   spellCheck={false}
                 />
-                <span>&apos;S </span>
+                <span>&apos;s </span>
                 <input
-                  className="overline-input"
+                  className="title-input title-text"
                   value={planner.title}
-                  onChange={e => updatePlannerField({ title: e.target.value.toUpperCase() })}
+                  onChange={e => updatePlannerField({ title: e.target.value })}
                   style={{ width: `${Math.max(planner.title.length, 10) + 1}ch` }}
                   spellCheck={false}
                 />
-              </>
+                <span className="title-sep">·</span>
+                <span className="title-year">{planner.year}</span>
+              </h1>
             )}
           </div>
-          <h1 className="display-year">{planner.year}</h1>
           {readOnly ? (
             planner.mantra ? <div className="mantra-static">&ldquo;{planner.mantra}&rdquo;</div> : null
           ) : (
@@ -269,7 +275,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                               style={{
                                 background: cat?.color || '#6b6258',
                                 color: cat?.text_color || '#ffffff',
-                                top: 18 + idx * 17,
+                                top: 14 + idx * 14,
                               }}
                               draggable={isStart && !readOnly}
                               onDragStart={e => { e.stopPropagation(); setDraggedEntry(entry); }}
@@ -676,24 +682,56 @@ const styles = `
 .mobile-toggle button { padding: 5px 8px; background: transparent; border: none; border-radius: 3px; cursor: pointer; color: var(--ink-mute); display: inline-flex; align-items: center; }
 .mobile-toggle button.active { background: var(--ink); color: var(--paper); }
 
-.printable { position: relative; z-index: 1; padding: 28px 32px 60px; max-width: 1600px; margin: 0 auto; }
+.printable { position: relative; z-index: 1; padding: 24px 32px 60px; max-width: 1600px; margin: 0 auto; }
 
-.planner-header { text-align: center; margin-bottom: 32px; padding-bottom: 18px; position: relative; }
-.planner-header::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 80px; height: 1px; background: var(--ink-soft); }
+.planner-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; position: relative; }
+.planner-header::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 60px; height: 1px; background: var(--ink-soft); }
 
-.overline { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 8px; max-width: 100%; overflow: visible; line-height: 1.5; }
-.overline-input { font: inherit; color: inherit; background: transparent; border: none; border-bottom: 1px dashed transparent; padding: 0 2px; text-transform: uppercase; text-align: center; letter-spacing: inherit; }
-.overline-input:hover, .overline-input:focus { border-bottom-color: var(--rule); outline: none; color: var(--ink); }
+.title-line { margin-bottom: 12px; }
 
-.display-year {
+.title-display {
   font-family: 'Fraunces', serif;
-  font-weight: 800;
-  font-size: clamp(44px, 7vw, 88px);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-  margin: 2px 0 12px;
+  font-weight: 700;
+  font-size: clamp(24px, 3.4vw, 38px);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0;
   color: var(--ink);
   font-variation-settings: 'opsz' 144;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.title-owner { font-weight: 600; }
+.title-text { font-style: italic; font-weight: 700; }
+.title-sep {
+  color: var(--ink-mute);
+  font-weight: 400;
+  font-size: 0.85em;
+  padding: 0 2px;
+}
+.title-year {
+  color: var(--ink-mute);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.title-input {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  padding: 0 2px;
+  text-align: center;
+  letter-spacing: inherit;
+}
+.title-input:hover, .title-input:focus {
+  border-bottom-color: var(--rule);
+  outline: none;
 }
 
 .mantra-input, .mantra-static {
@@ -755,10 +793,10 @@ const styles = `
 
 .entry-pill {
   position: absolute; left: 2px; right: 2px;
-  padding: 3px 5px; border-radius: 2px;
-  font-size: 9px; font-weight: 600; line-height: 1.15;
+  padding: 2px 4px; border-radius: 2px;
+  font-size: 8px; font-weight: 600; line-height: 1.1;
   cursor: grab; overflow: hidden; word-break: break-word; z-index: 2;
-  letter-spacing: 0.01em; box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+  letter-spacing: 0; box-shadow: 0 1px 0 rgba(0,0,0,0.08);
 }
 .entry-pill:active { cursor: grabbing; }
 .entry-pill.continuation { border-radius: 0; padding-left: 2px; left: 0; right: 0; }
@@ -872,28 +910,130 @@ const styles = `
 }
 
 @media print {
-  @page { size: tabloid landscape; margin: 0.5in; }
-  .toolbar, .mobile-toggle, .scroll-hint { display: none !important; }
+  @page { size: tabloid landscape; margin: 0.35in; }
+
+  /* Hide all interactive chrome */
+  .toolbar, .mobile-toggle, .scroll-hint, .planner-footer { display: none !important; }
   .month-list { display: none !important; }
   .grid-wrap { display: block !important; overflow: visible !important; }
   .grid-wrap.mobile-hide { display: block !important; }
 
-  .planner-root { background: white; }
+  /* Force everything onto one page */
+  html, body { height: 100%; }
+  .planner-root {
+    background: white;
+    min-height: 0;
+    height: auto;
+  }
   .planner-root::before { display: none; }
-  .printable { padding: 0; max-width: none; }
+  .printable {
+    padding: 0;
+    max-width: none;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 
-  .planner-header { margin-bottom: 28px; padding-bottom: 16px; }
-  .display-year { font-size: 110px; margin: 4px 0 10px; }
-  .overline { letter-spacing: 0.3em; }
+  /* Compact header on one line */
+  .planner-header {
+    margin: 0 0 6px;
+    padding-bottom: 6px;
+    text-align: center;
+  }
+  .planner-header::after {
+    width: 40px;
+  }
+  .title-line { margin-bottom: 4px; }
+  .title-display {
+    font-size: 18px !important;
+    gap: 2px 6px;
+  }
+  .title-input { padding: 0; }
+  .mantra-input, .mantra-static {
+    font-size: 11px !important;
+    margin: 0 auto;
+    padding: 0;
+    min-height: 0;
+  }
+  .mantra-input::placeholder { color: transparent; }
+  .mantra-input:placeholder-shown { display: none; }
 
-  .calendar-grid { border-color: #999; box-shadow: none; }
-  .day-cell { border-right-color: #ddd; }
-  .month-row { border-bottom-color: #ccc; }
-  .entry-pill { font-size: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; box-shadow: none; }
-  .month-row.q0, .month-row.q1, .month-row.q2, .month-row.q3 { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .legend-swatch { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .legend { margin-top: 32px; }
-  .legend-grid { gap: 18px; }
-  .planner-footer { margin-top: 32px; }
+  /* Compact calendar — fits 12 rows in the available height */
+  .calendar-grid {
+    border-color: #999;
+    box-shadow: none;
+    flex-shrink: 0;
+  }
+  .month-row {
+    min-height: 0;
+    height: 40px;
+    border-bottom-color: #ccc;
+  }
+  .month-label {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+  .day-cell {
+    border-right-color: #ddd;
+    min-height: 0;
+    padding: 1px;
+  }
+  .day-number {
+    font-size: 7px;
+    top: 1px;
+    left: 2px;
+  }
+  .entry-pill {
+    font-size: 6.5px !important;
+    padding: 1px 2px !important;
+    line-height: 1.05 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none !important;
+  }
+  .month-row.q0, .month-row.q1, .month-row.q2, .month-row.q3 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Compact legend at the bottom — keep 6 columns */
+  .legend {
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+  .legend-rule { margin-bottom: 6px; }
+  .legend-rule::before { font-size: 8px; top: -5px; }
+  .legend-title-bar { margin-bottom: 6px; gap: 0; }
+  .legend-title { font-size: 12px; }
+  .legend-sub { font-size: 7px; letter-spacing: 0.18em; }
+  .legend-grid {
+    gap: 10px;
+    grid-template-columns: repeat(6, 1fr) !important;
+  }
+  .legend-swatch {
+    width: 9px;
+    height: 9px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .legend-header { gap: 4px; }
+  .legend-name, .legend-name-static {
+    font-size: 10px !important;
+  }
+  .legend-desc, .legend-desc-static {
+    font-size: 7.5px !important;
+    line-height: 1.3 !important;
+    min-height: 0 !important;
+    margin-bottom: 2px;
+  }
+  .legend-items, .legend-items-static {
+    font-size: 7px !important;
+    line-height: 1.3 !important;
+    min-height: 0 !important;
+  }
+
+  /* Hide editing affordances on print */
+  .lock-mark { display: none !important; }
 }
 `;
