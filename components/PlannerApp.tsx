@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import NextLink from 'next/link';
-import { Plus, Download, Printer, Trash2, X, ChevronLeft, ChevronRight, Settings, Share2, LogOut, Link as LinkIcon, Check, Grid3x3, List, Info } from 'lucide-react';
+import { Plus, Download, Printer, Trash2, X, ChevronLeft, ChevronRight, Settings, Share2, LogOut, Link as LinkIcon, Check, Grid3x3, List, Info, Edit3 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { type Planner, type Category, type Entry, MONTHS, MONTHS_FULL, daysInMonth, isCoreCategory } from '@/lib/types';
 
@@ -27,6 +27,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
   const [addingFor, setAddingFor] = useState<{ month: number; day: number } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showHeaderEdit, setShowHeaderEdit] = useState(false);
   const [draggedEntry, setDraggedEntry] = useState<Entry | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>('grid');
   const debouncers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -67,16 +68,37 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
     });
   }
 
-  async function addEntry(data: Omit<Entry, 'id' | 'planner_id'>) {
-    const res = await fetch('/api/entries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, planner_id: planner.id }),
-    });
-    if (res.ok) {
-      const created = await res.json();
-      setEntries(prev => [...prev, created]);
+  // Add entry — handles cross-month splits automatically
+  async function addEntry(data: { label: string; category_id: string | null; start_month: number; start_day: number; end_month: number; end_day: number }) {
+    const chunks: { month: number; start_day: number; end_day: number }[] = [];
+    if (data.start_month === data.end_month) {
+      chunks.push({ month: data.start_month, start_day: data.start_day, end_day: data.end_day });
+    } else {
+      // First chunk: start_month from start_day to end of month
+      chunks.push({ month: data.start_month, start_day: data.start_day, end_day: daysInMonth(planner.year, data.start_month) });
+      // Middle chunks: full months
+      for (let m = data.start_month + 1; m < data.end_month; m++) {
+        chunks.push({ month: m, start_day: 1, end_day: daysInMonth(planner.year, m) });
+      }
+      // Last chunk: end_month from day 1 to end_day
+      chunks.push({ month: data.end_month, start_day: 1, end_day: data.end_day });
     }
+
+    const created: Entry[] = [];
+    for (const chunk of chunks) {
+      const res = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planner_id: planner.id,
+          category_id: data.category_id,
+          label: data.label,
+          ...chunk,
+        }),
+      });
+      if (res.ok) created.push(await res.json());
+    }
+    if (created.length) setEntries(prev => [...prev, ...created]);
   }
 
   async function updateEntry(id: string, patch: Partial<Entry>) {
@@ -91,6 +113,16 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
   async function deleteEntry(id: string) {
     setEntries(prev => prev.filter(e => e.id !== id));
     await fetch(`/api/entries/${id}`, { method: 'DELETE' });
+  }
+
+  // Delete all chunks of a multi-month entry (by matching label + category)
+  async function deleteEntryGroup(entry: Entry) {
+    const matches = entries.filter(e =>
+      e.label === entry.label &&
+      e.category_id === entry.category_id
+    );
+    setEntries(prev => prev.filter(e => !matches.some(m => m.id === e.id)));
+    await Promise.all(matches.map(m => fetch(`/api/entries/${m.id}`, { method: 'DELETE' })));
   }
 
   async function updateCategory(id: string, patch: Partial<Category>) {
@@ -130,6 +162,10 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
 
   function getEntriesForDay(month: number, day: number) {
     return entries.filter(e => e.month === month && day >= e.start_day && day <= e.end_day);
+  }
+
+  function getEntriesForMonth(month: number) {
+    return entries.filter(e => e.month === month);
   }
 
   function handleDrop(month: number, day: number) {
@@ -183,9 +219,8 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
             <Info size={14} /> <span className="btn-text">About</span>
           </NextLink>
         )}
-
         {!readOnly && (
-          <button className="tb-btn signout" onClick={signOut} title={userEmail}>
+          <button className="tb-btn" onClick={signOut} title={userEmail}>
             <LogOut size={14} /> <span className="btn-text">Sign out</span>
           </button>
         )}
@@ -194,46 +229,29 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
       <div className="printable">
         <header className="planner-header">
           <div className="title-line">
-            {readOnly ? (
-              <h1 className="title-display">
-                <span className="title-owner">{planner.owner_name}&apos;s</span>{' '}
-                <span className="title-text">{planner.title}</span>
-                <span className="title-sep">·</span>
-                <span className="title-year">{planner.year}</span>
-              </h1>
-            ) : (
-              <h1 className="title-display">
-                <input
-                  className="title-input title-owner"
-                  value={planner.owner_name}
-                  onChange={e => updatePlannerField({ owner_name: e.target.value })}
-                  style={{ width: `${Math.max(planner.owner_name.length, 3) + 1}ch` }}
-                  spellCheck={false}
-                />
-                <span>&apos;s </span>
-                <input
-                  className="title-input title-text"
-                  value={planner.title}
-                  onChange={e => updatePlannerField({ title: e.target.value })}
-                  style={{ width: `${Math.max(planner.title.length, 10) + 1}ch` }}
-                  spellCheck={false}
-                />
-                <span className="title-sep">·</span>
-                <span className="title-year">{planner.year}</span>
-              </h1>
+            <h1 className="title-display">
+              <span className="title-owner">{planner.owner_name}&apos;s</span>{' '}
+              <span className="title-text">{planner.title}</span>
+              <span className="title-sep"> · </span>
+              <span className="title-year">{planner.year}</span>
+              <span className="title-mantra-sep"> — </span>
+              {planner.mantra ? (
+                <span className="title-mantra">&ldquo;{planner.mantra}&rdquo;</span>
+              ) : (
+                !readOnly && <span className="title-mantra-placeholder">add a mantra</span>
+              )}
+            </h1>
+            {!readOnly && (
+              <button
+                className="header-edit-btn"
+                onClick={() => setShowHeaderEdit(true)}
+                title="Edit name, title & mantra"
+              >
+                <Edit3 size={12} />
+                <span className="btn-text">Edit</span>
+              </button>
             )}
           </div>
-          {readOnly ? (
-            planner.mantra ? <div className="mantra-static">&ldquo;{planner.mantra}&rdquo;</div> : null
-          ) : (
-            <input
-              className="mantra-input"
-              value={planner.mantra || ''}
-              onChange={e => updatePlannerField({ mantra: e.target.value })}
-              placeholder="A guiding word, mantra, or quote for the year…"
-              maxLength={140}
-            />
-          )}
         </header>
 
         <div className={`grid-wrap ${mobileView === 'list' ? 'mobile-hide' : ''}`}>
@@ -241,13 +259,13 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
             {MONTHS.map((m, mi) => {
               const maxDay = daysInMonth(planner.year, mi);
               const quarter = Math.floor(mi / 3);
+              const monthEntries = getEntriesForMonth(mi);
               return (
                 <div className={`month-row q${quarter}`} key={mi}>
                   <div className="month-label">{m}</div>
                   {Array.from({ length: 31 }, (_, di) => {
                     const day = di + 1;
                     const valid = day <= maxDay;
-                    const dayEntries = valid ? getEntriesForDay(mi, day) : [];
                     return (
                       <div
                         key={di}
@@ -257,38 +275,34 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                         onDrop={e => { e.preventDefault(); if (valid && !readOnly) handleDrop(mi, day); }}
                       >
                         {valid && <div className="day-number">{day}</div>}
-                        {dayEntries.map((entry, idx) => {
-                          const cat = categories.find(c => c.id === entry.category_id) || null;
-                          const isStart = day === entry.start_day;
-                          const isEnd = day === entry.end_day;
-                          const isSingle = isStart && isEnd;
-                          let cls = 'entry-pill';
-                          if (!isSingle) {
-                            if (isStart) cls += ' start';
-                            else if (isEnd) cls += ' end';
-                            else cls += ' continuation';
-                          }
-                          return (
-                            <div
-                              key={entry.id}
-                              className={cls}
-                              style={{
-                                background: cat?.color || '#6b6258',
-                                color: cat?.text_color || '#ffffff',
-                                top: 14 + idx * 14,
-                              }}
-                              draggable={isStart && !readOnly}
-                              onDragStart={e => { e.stopPropagation(); setDraggedEntry(entry); }}
-                              onClick={e => { e.stopPropagation(); if (!readOnly) setEditingEntry(entry); }}
-                              title={entry.label}
-                            >
-                              {isStart || isSingle ? entry.label : ''}
-                            </div>
-                          );
-                        })}
                       </div>
                     );
                   })}
+
+                  {/* Render entries as positioned bars, centered text, with row collision detection */}
+                  {(() => {
+                    // Assign each entry a row index that avoids collision with prior entries
+                    const placed: { row: number; start: number; end: number }[] = [];
+                    return monthEntries.map((entry) => {
+                      let row = 0;
+                      while (placed.some(p => p.row === row && !(entry.end_day < p.start || entry.start_day > p.end))) {
+                        row++;
+                      }
+                      placed.push({ row, start: entry.start_day, end: entry.end_day });
+                      const cat = categories.find(c => c.id === entry.category_id) || null;
+                      return (
+                        <EntryBar
+                          key={entry.id}
+                          entry={entry}
+                          category={cat}
+                          row={row}
+                          readOnly={readOnly}
+                          onDragStart={() => setDraggedEntry(entry)}
+                          onClick={() => !readOnly && setEditingEntry(entry)}
+                        />
+                      );
+                    });
+                  })()}
                 </div>
               );
             })}
@@ -368,13 +382,15 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                       <input className="legend-name" value={cat.name} onChange={e => updateCategory(cat.id, { name: e.target.value })} />
                     )}
                   </div>
+                  {/* description (screen-only) */}
                   {readOnly ? (
-                    <div className="legend-desc-static">{cat.description}</div>
+                    <div className="legend-desc-static screen-only">{cat.description}</div>
                   ) : locked ? (
-                    <div className="legend-desc-static" title={lockTooltip}>{cat.description}</div>
+                    <div className="legend-desc-static screen-only" title={lockTooltip}>{cat.description}</div>
                   ) : (
-                    <textarea className="legend-desc" value={cat.description} onChange={e => updateCategory(cat.id, { description: e.target.value })} />
+                    <textarea className="legend-desc screen-only" value={cat.description} onChange={e => updateCategory(cat.id, { description: e.target.value })} />
                   )}
+                  {/* items (always shown) */}
                   {readOnly ? (
                     <div className="legend-items-static">
                       {(cat.items || []).filter(Boolean).map((it, i) => <div key={i}>• {it}</div>)}
@@ -394,45 +410,146 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
       </div>
 
       {addingFor && !readOnly && (
-        <EntryModal mode="add" year={planner.year} initial={{ month: addingFor.month, start_day: addingFor.day, end_day: addingFor.day, category_id: categories[0]?.id || null, label: '' }} categories={categories} onSave={(data) => { addEntry(data); setAddingFor(null); }} onClose={() => setAddingFor(null)} />
+        <EntryModal
+          mode="add"
+          year={planner.year}
+          initial={{ month: addingFor.month, start_day: addingFor.day, end_day: addingFor.day, category_id: categories[0]?.id || null, label: '' }}
+          categories={categories}
+          entries={entries}
+          onSaveNew={(data) => { addEntry(data); setAddingFor(null); }}
+          onClose={() => setAddingFor(null)}
+        />
       )}
 
       {editingEntry && !readOnly && (
-        <EntryModal mode="edit" year={planner.year} initial={editingEntry} categories={categories} onSave={(data) => { updateEntry(editingEntry.id, data); setEditingEntry(null); }} onDelete={() => { deleteEntry(editingEntry.id); setEditingEntry(null); }} onClose={() => setEditingEntry(null)} />
+        <EntryModal
+          mode="edit"
+          year={planner.year}
+          initial={editingEntry}
+          categories={categories}
+          entries={entries}
+          onSaveExisting={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); }}
+          onDelete={() => { deleteEntryGroup(editingEntry); setEditingEntry(null); }}
+          onClose={() => setEditingEntry(null)}
+        />
       )}
 
       {showSettings && !readOnly && (
-        <CategoriesModal categories={categories} onUpdate={updateCategory} onAdd={addCategory} onDelete={deleteCategory} onClose={() => setShowSettings(false)} />
+        <CategoriesModal
+          categories={categories}
+          onUpdate={updateCategory}
+          onAdd={addCategory}
+          onDelete={deleteCategory}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {showShare && !readOnly && (
-        <ShareModal planner={planner} onUpdate={(token) => setPlanner(p => ({ ...p, share_token: token }))} onClose={() => setShowShare(false)} />
+        <ShareModal
+          planner={planner}
+          onUpdate={(token) => setPlanner(p => ({ ...p, share_token: token }))}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+
+      {showHeaderEdit && !readOnly && (
+        <HeaderEditModal
+          planner={planner}
+          onSave={(patch) => { updatePlannerField(patch); setShowHeaderEdit(false); }}
+          onClose={() => setShowHeaderEdit(false)}
+        />
       )}
     </div>
   );
 }
 
-type EntryDraft = Omit<Entry, 'id' | 'planner_id'>;
+// ---- Entry bar — single row position, centered text, spans across days ----
+function EntryBar({ entry, category, row, readOnly, onDragStart, onClick }: {
+  entry: Entry;
+  category: Category | null;
+  row: number;
+  readOnly: boolean;
+  onDragStart: () => void;
+  onClick: () => void;
+}) {
+  // Calculate left/width as % of the 31-day grid area
+  const cellsPerDay = `calc((100% - var(--month-label-w)) / 31)`;
+  const left = `calc(var(--month-label-w) + ${entry.start_day - 1} * ${cellsPerDay} + 2px)`;
+  const width = `calc(${entry.end_day - entry.start_day + 1} * ${cellsPerDay} - 4px)`;
+  const top = `calc(var(--cell-top-padding) + ${row} * var(--pill-stack))`;
 
-function EntryModal({ mode, year, initial, categories, onSave, onDelete, onClose }: {
-  mode: 'add' | 'edit'; year: number; initial: EntryDraft; categories: Category[];
-  onSave: (data: EntryDraft) => void; onDelete?: () => void; onClose: () => void;
+  return (
+    <div
+      className="entry-bar"
+      style={{
+        position: 'absolute',
+        left, width, top,
+        background: category?.color || '#6b6258',
+        color: category?.text_color || '#ffffff',
+      }}
+      draggable={!readOnly}
+      onDragStart={e => { e.stopPropagation(); onDragStart(); }}
+      onClick={e => { e.stopPropagation(); onClick(); }}
+      title={entry.label}
+    >
+      <span className="entry-bar-label">{entry.label}</span>
+    </div>
+  );
+}
+
+// ---- Entry add/edit modal with start month + end month ----
+function EntryModal({ mode, year, initial, categories, entries, onSaveNew, onSaveExisting, onDelete, onClose }: {
+  mode: 'add' | 'edit';
+  year: number;
+  initial: { label: string; category_id: string | null; month?: number; start_day: number; end_day: number };
+  categories: Category[];
+  entries: Entry[];
+  onSaveNew?: (data: { label: string; category_id: string | null; start_month: number; start_day: number; end_month: number; end_day: number }) => void;
+  onSaveExisting?: (patch: Partial<Entry>) => void;
+  onDelete?: () => void;
+  onClose: () => void;
 }) {
   const [label, setLabel] = useState(initial.label || '');
   const [categoryId, setCategoryId] = useState<string | null>(initial.category_id);
-  const [month, setMonth] = useState(initial.month);
+  const [startMonth, setStartMonth] = useState(initial.month ?? 0);
   const [startDay, setStartDay] = useState(initial.start_day);
+  const [endMonth, setEndMonth] = useState(initial.month ?? 0);
   const [endDay, setEndDay] = useState(initial.end_day || initial.start_day);
 
-  const maxDay = daysInMonth(year, month);
+  const startMaxDay = daysInMonth(year, startMonth);
+  const endMaxDay = daysInMonth(year, endMonth);
 
   function handleSave() {
     if (!label.trim()) return;
-    onSave({
-      label: label.trim(), category_id: categoryId, month,
-      start_day: Math.min(startDay, endDay), end_day: Math.max(startDay, endDay),
-    });
+    if (mode === 'add' && onSaveNew) {
+      // Validate: start must be before or equal to end
+      const startTotal = startMonth * 100 + startDay;
+      const endTotal = endMonth * 100 + endDay;
+      if (startTotal > endTotal) {
+        alert('End date must be on or after start date');
+        return;
+      }
+      onSaveNew({
+        label: label.trim(),
+        category_id: categoryId,
+        start_month: startMonth,
+        start_day: startDay,
+        end_month: endMonth,
+        end_day: endDay,
+      });
+    } else if (mode === 'edit' && onSaveExisting) {
+      // Edit only updates this single chunk
+      onSaveExisting({
+        label: label.trim(),
+        category_id: categoryId,
+        month: startMonth,
+        start_day: Math.min(startDay, endDay),
+        end_day: Math.max(startDay, endDay),
+      });
+    }
   }
+
+  const isCrossMonth = startMonth !== endMonth;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -453,28 +570,60 @@ function EntryModal({ mode, year, initial, categories, onSave, onDelete, onClose
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div className="field">
-            <label>Month</label>
-            <select value={month} onChange={e => {
-              const m = parseInt(e.target.value);
-              setMonth(m);
-              const md = daysInMonth(year, m);
-              if (startDay > md) setStartDay(md);
-              if (endDay > md) setEndDay(md);
-            }}>
-              {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-          </div>
+
           <div className="field-row">
             <div className="field">
-              <label>Start day</label>
-              <input type="number" min={1} max={maxDay} value={startDay} onChange={e => setStartDay(parseInt(e.target.value) || 1)} />
+              <label>Start month</label>
+              <select value={startMonth} onChange={e => {
+                const m = parseInt(e.target.value);
+                setStartMonth(m);
+                const md = daysInMonth(year, m);
+                if (startDay > md) setStartDay(md);
+                // Sync end month if we're moving start past end
+                if (mode === 'add' && m > endMonth) { setEndMonth(m); setEndDay(startDay); }
+              }}>
+                {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+              </select>
             </div>
             <div className="field">
-              <label>End day</label>
-              <input type="number" min={1} max={maxDay} value={endDay} onChange={e => setEndDay(parseInt(e.target.value) || 1)} />
+              <label>Start day</label>
+              <input type="number" min={1} max={startMaxDay} value={startDay} onChange={e => setStartDay(parseInt(e.target.value) || 1)} />
             </div>
           </div>
+
+          {mode === 'add' && (
+            <div className="field-row">
+              <div className="field">
+                <label>End month</label>
+                <select value={endMonth} onChange={e => {
+                  const m = parseInt(e.target.value);
+                  setEndMonth(m);
+                  const md = daysInMonth(year, m);
+                  if (endDay > md) setEndDay(md);
+                }}>
+                  {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>End day</label>
+                <input type="number" min={1} max={endMaxDay} value={endDay} onChange={e => setEndDay(parseInt(e.target.value) || 1)} />
+              </div>
+            </div>
+          )}
+
+          {mode === 'edit' && (
+            <div className="field">
+              <label>End day (in {MONTHS_FULL[startMonth]})</label>
+              <input type="number" min={1} max={startMaxDay} value={endDay} onChange={e => setEndDay(parseInt(e.target.value) || 1)} />
+              <div className="field-note">Editing only changes this month&apos;s portion of the entry.</div>
+            </div>
+          )}
+
+          {mode === 'add' && isCrossMonth && (
+            <div className="cross-month-note">
+              <strong>Cross-month entry:</strong> This will create chunks in {MONTHS_FULL[startMonth]} through {MONTHS_FULL[endMonth]}, linked as one event.
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           {mode === 'edit' && onDelete ? (
@@ -483,6 +632,54 @@ function EntryModal({ mode, year, initial, categories, onSave, onDelete, onClose
           <div className="right">
             <button className="btn" onClick={onClose}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>{mode === 'add' ? 'Add' : 'Save'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Header edit modal ----
+function HeaderEditModal({ planner, onSave, onClose }: {
+  planner: Planner;
+  onSave: (patch: Partial<Planner>) => void;
+  onClose: () => void;
+}) {
+  const [ownerName, setOwnerName] = useState(planner.owner_name);
+  const [title, setTitle] = useState(planner.title);
+  const [mantra, setMantra] = useState(planner.mantra || '');
+
+  function handleSave() {
+    onSave({ owner_name: ownerName.trim(), title: title.trim(), mantra: mantra.trim() });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Edit header</h2>
+          <button className="icon-btn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label>Your name</label>
+            <input autoFocus value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="e.g. Jason" />
+          </div>
+          <div className="field">
+            <label>Title</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Intentional Year" />
+          </div>
+          <div className="field">
+            <label>Mantra / guiding quote</label>
+            <input value={mantra} onChange={e => setMantra(e.target.value)} placeholder="A guiding word or quote for the year…" maxLength={140} onKeyDown={e => e.key === 'Enter' && handleSave()} />
+            <div className="field-note">Optional. Shown alongside the title in italic.</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <div />
+          <div className="right">
+            <button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSave}>Save</button>
           </div>
         </div>
       </div>
@@ -512,10 +709,7 @@ function CategoriesModal({ categories, onUpdate, onAdd, onDelete, onClose }: {
               <div key={cat.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: 8, alignItems: 'center' }}>
                 <div className="legend-swatch" style={{ background: cat.color, width: 24, height: 24 }} />
                 {locked ? (
-                  <div
-                    title={lockTooltip}
-                    style={{ padding: '6px 8px', border: '1px solid transparent', borderRadius: 3, background: 'transparent', color: '#4a4238', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
-                  >
+                  <div title={lockTooltip} style={{ padding: '6px 8px', color: '#4a4238', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {cat.name}
                     <span style={{ fontSize: 9, color: '#8a3a2a', letterSpacing: '0.1em' }}>◆ CORE</span>
                   </div>
@@ -544,7 +738,9 @@ function CategoriesModal({ categories, onUpdate, onAdd, onDelete, onClose }: {
 }
 
 function ShareModal({ planner, onUpdate, onClose }: {
-  planner: Planner; onUpdate: (token: string | null) => void; onClose: () => void;
+  planner: Planner;
+  onUpdate: (token: string | null) => void;
+  onClose: () => void;
 }) {
   const [token, setToken] = useState(planner.share_token);
   const [copied, setCopied] = useState(false);
@@ -621,6 +817,9 @@ const styles = `
   --q-tint-2: rgba(150, 120, 80, 0.05);
   --q-tint-3: rgba(120, 145, 110, 0.06);
   --q-tint-4: rgba(140, 110, 95, 0.07);
+  --month-label-w: 56px;
+  --cell-top-padding: 14px;
+  --pill-stack: 16px;
 }
 
 .planner-root {
@@ -636,11 +835,8 @@ const styles = `
 
 .planner-root::before {
   content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.4;
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 0; opacity: 0.4;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -684,67 +880,56 @@ const styles = `
 
 .printable { position: relative; z-index: 1; padding: 24px 32px 60px; max-width: 1600px; margin: 0 auto; }
 
-.planner-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; position: relative; }
-.planner-header::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 60px; height: 1px; background: var(--ink-soft); }
+/* ---- Header ---- */
+.planner-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
 
-.title-line { margin-bottom: 12px; }
+.title-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 
 .title-display {
   font-family: 'Fraunces', serif;
   font-weight: 700;
-  font-size: clamp(24px, 3.4vw, 38px);
-  line-height: 1.15;
-  letter-spacing: -0.015em;
+  font-size: clamp(20px, 2.6vw, 30px);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   margin: 0;
   color: var(--ink);
   font-variation-settings: 'opsz' 144;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
 }
 
 .title-owner { font-weight: 600; }
 .title-text { font-style: italic; font-weight: 700; }
-.title-sep {
-  color: var(--ink-mute);
-  font-weight: 400;
-  font-size: 0.85em;
-  padding: 0 2px;
-}
-.title-year {
-  color: var(--ink-mute);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
+.title-sep, .title-mantra-sep { color: var(--ink-mute); font-weight: 400; }
+.title-mantra-sep { color: var(--rule); font-weight: 300; padding: 0 4px; }
+.title-year { font-weight: 600; font-variant-numeric: tabular-nums; }
+.title-mantra { font-style: italic; font-weight: 400; color: var(--ink-soft); }
+.title-mantra-placeholder { font-style: italic; font-weight: 400; color: var(--ink-mute); opacity: 0.5; }
 
-.title-input {
-  font: inherit;
-  color: inherit;
+.header-edit-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
   background: transparent;
-  border: none;
-  border-bottom: 1px dashed transparent;
-  padding: 0 2px;
-  text-align: center;
-  letter-spacing: inherit;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-size: 11px; font-weight: 500;
+  color: var(--ink-mute);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
 }
-.title-input:hover, .title-input:focus {
-  border-bottom-color: var(--rule);
-  outline: none;
-}
+.header-edit-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
-.mantra-input, .mantra-static {
-  display: block; font-family: 'Fraunces', serif; font-style: italic; font-weight: 400;
-  font-size: clamp(15px, 1.6vw, 19px);
-  color: var(--ink-soft);
-  text-align: center; width: 100%; max-width: 640px;
-  margin: 0 auto; background: transparent; border: none;
-  padding: 4px 8px; line-height: 1.5;
-}
-.mantra-input:hover, .mantra-input:focus { outline: none; background: rgba(255,255,255,0.4); border-radius: 2px; }
-.mantra-input::placeholder { color: var(--ink-mute); opacity: 0.55; font-style: italic; }
-
+/* ---- Calendar grid ---- */
 .grid-wrap { position: relative; }
 
 .calendar-grid {
@@ -757,9 +942,9 @@ const styles = `
 
 .month-row {
   display: grid;
-  grid-template-columns: 56px repeat(31, minmax(0, 1fr));
+  grid-template-columns: var(--month-label-w) repeat(31, minmax(0, 1fr));
   border-bottom: 1px solid var(--rule-soft);
-  min-height: 58px;
+  min-height: 56px;
   position: relative;
 }
 .month-row:last-child { border-bottom: none; }
@@ -779,7 +964,7 @@ const styles = `
 
 .day-cell {
   position: relative; border-right: 1px solid rgba(201, 191, 168, 0.4);
-  padding: 2px; min-height: 58px; cursor: pointer; transition: background 0.1s;
+  padding: 2px; min-height: 56px; cursor: pointer; transition: background 0.1s;
 }
 .day-cell.readonly { cursor: default; }
 .day-cell:last-child { border-right: none; }
@@ -789,34 +974,47 @@ const styles = `
   cursor: not-allowed;
 }
 
-.day-number { position: absolute; top: 4px; left: 5px; font-size: 9px; font-weight: 600; color: var(--ink-mute); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.day-number { position: absolute; top: 3px; left: 4px; font-size: 9px; font-weight: 600; color: var(--ink-mute); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; pointer-events: none; }
 
-.entry-pill {
-  position: absolute; left: 2px; right: 2px;
-  padding: 2px 4px; border-radius: 2px;
-  font-size: 8px; font-weight: 600; line-height: 1.1;
-  cursor: grab; overflow: hidden; word-break: break-word; z-index: 2;
-  letter-spacing: 0; box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+/* ---- Entry bars (stretched & centered) ---- */
+.entry-bar {
+  position: absolute;
+  height: 14px;
+  padding: 0 5px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  cursor: grab;
+  overflow: hidden;
+  z-index: 2;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.entry-pill:active { cursor: grabbing; }
-.entry-pill.continuation { border-radius: 0; padding-left: 2px; left: 0; right: 0; }
-.entry-pill.start { border-top-right-radius: 0; border-bottom-right-radius: 0; right: 0; }
-.entry-pill.end { border-top-left-radius: 0; border-bottom-left-radius: 0; left: 0; }
+.entry-bar:active { cursor: grabbing; }
+.entry-bar-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+}
 
 .scroll-hint { display: none; text-align: center; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 10px; font-weight: 500; }
 
+/* ---- Mobile month-list view ---- */
 .month-list { display: none; }
-
 .month-section { margin-bottom: 24px; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; background: var(--paper-soft); }
 .month-section.q0 { background: linear-gradient(to bottom, var(--q-tint-1), var(--paper-soft)); }
 .month-section.q1 { background: linear-gradient(to bottom, var(--q-tint-2), var(--paper-soft)); }
 .month-section.q2 { background: linear-gradient(to bottom, var(--q-tint-3), var(--paper-soft)); }
 .month-section.q3 { background: linear-gradient(to bottom, var(--q-tint-4), var(--paper-soft)); }
-
 .month-section-header { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 16px; border-bottom: 1px solid var(--rule-soft); background: var(--paper-deep); }
 .month-full { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; color: var(--ink); }
 .month-meta { font-size: 10px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-mute); }
-
 .day-list { padding: 4px 0; }
 .day-row { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 8px 16px; border-bottom: 1px solid rgba(201,191,168,0.3); cursor: pointer; min-height: 38px; align-items: center; }
 .day-row:last-child { border-bottom: none; }
@@ -827,11 +1025,12 @@ const styles = `
 .row-pill { font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 3px; letter-spacing: 0.01em; }
 .row-pill-cont { opacity: 0.7; font-weight: 400; font-style: italic; }
 
-.legend { margin-top: 48px; }
-.legend-rule { height: 1px; background: var(--ink-soft); margin-bottom: 24px; position: relative; }
+/* ---- Legend ---- */
+.legend { margin-top: 36px; }
+.legend-rule { height: 1px; background: var(--ink-soft); margin-bottom: 20px; position: relative; }
 .legend-rule::before { content: '◆'; position: absolute; top: -7px; font-size: 10px; color: var(--ink-soft); background: var(--paper); padding: 0 6px; left: 50%; transform: translateX(-50%); }
 
-.legend-title-bar { display: flex; flex-direction: column; align-items: center; margin-bottom: 28px; gap: 2px; }
+.legend-title-bar { display: flex; flex-direction: column; align-items: center; margin-bottom: 24px; gap: 2px; }
 .legend-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; color: var(--ink); }
 .legend-sub { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
 
@@ -843,9 +1042,6 @@ const styles = `
 .legend-name, .legend-name-static { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 700; background: transparent; border: none; padding: 0; color: var(--ink); width: 100%; letter-spacing: -0.005em; }
 .legend-name-locked { display: flex; align-items: center; gap: 6px; cursor: help; }
 .lock-mark { font-size: 8px; color: var(--accent); letter-spacing: 0.1em; font-weight: 600; opacity: 0.7; }
-
-.modal-note { font-size: 12px; line-height: 1.5; color: var(--ink-soft); background: rgba(255,255,255,0.5); border-left: 2px solid var(--accent); padding: 10px 12px; border-radius: 0 3px 3px 0; margin-bottom: 4px; }
-.modal-note strong { color: var(--ink); font-weight: 600; }
 .legend-name:focus { outline: 1px dashed var(--rule); outline-offset: 2px; }
 
 .legend-desc, .legend-desc-static { font-size: 11px; color: var(--ink-soft); line-height: 1.5; background: transparent; border: none; padding: 0; resize: vertical; font-family: inherit; width: 100%; min-height: 54px; }
@@ -857,27 +1053,38 @@ const styles = `
 .planner-footer { margin-top: 56px; text-align: center; border-top: 1px solid var(--rule); padding-top: 20px; }
 .footer-mark { font-family: 'Fraunces', serif; font-size: 12px; letter-spacing: 0.4em; color: var(--ink-mute); font-weight: 600; }
 
+/* ---- Modals ---- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(42, 38, 32, 0.55); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
-.modal { background: var(--paper-soft); border-radius: 4px; width: 100%; max-width: 440px; box-shadow: 0 24px 60px rgba(42,38,32,0.4); overflow: hidden; border: 1px solid var(--rule); }
+.modal { background: var(--paper-soft); border-radius: 4px; width: 100%; max-width: 460px; box-shadow: 0 24px 60px rgba(42,38,32,0.4); overflow: hidden; border: 1px solid var(--rule); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--rule); background: var(--paper-deep); }
 .modal-header h2 { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 700; margin: 0; color: var(--ink); }
 .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-note { font-size: 12px; line-height: 1.5; color: var(--ink-soft); background: rgba(255,255,255,0.5); border-left: 2px solid var(--accent); padding: 10px 12px; border-radius: 0 3px 3px 0; margin-bottom: 4px; }
+.modal-note strong { color: var(--ink); font-weight: 600; }
+.cross-month-note { font-size: 12px; line-height: 1.4; color: var(--ink-soft); background: rgba(184, 138, 63, 0.1); border-left: 2px solid #b88a3f; padding: 8px 10px; border-radius: 0 3px 3px 0; }
+.cross-month-note strong { color: var(--ink); font-weight: 600; }
+
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-mute); }
 .field input, .field select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 3px; font-size: 14px; font-family: inherit; background: white; color: var(--ink); }
 .field input:focus, .field select:focus { outline: none; border-color: var(--ink); }
+.field-note { font-size: 11px; color: var(--ink-mute); margin-top: 2px; font-style: italic; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
 .modal-footer { padding: 14px 20px; display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--rule); background: var(--paper-deep); }
 .modal-footer .right { display: flex; gap: 8px; }
+
 .btn { padding: 8px 14px; border: 1px solid var(--rule); border-radius: 3px; background: white; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
 .btn:hover { background: var(--paper-deep); }
 .btn-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .btn-primary:hover { background: var(--ink-soft); }
 .btn-danger { color: var(--accent); border-color: rgba(138,58,42,0.3); }
 .btn-danger:hover { background: rgba(138,58,42,0.08); }
+
 .icon-btn { background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 3px; color: var(--ink-soft); }
 .icon-btn:hover { background: var(--paper-deep); color: var(--ink); }
 
+/* ---- Responsive ---- */
 .mobile-hide { display: none; }
 
 @media (min-width: 901px) {
@@ -890,8 +1097,10 @@ const styles = `
   .printable { padding: 24px 16px 40px; }
   .mobile-toggle { display: inline-flex; }
   .btn-text { display: none; }
-  .signout, .about-link { margin-left: 0; }
   .about-link { margin-left: auto; }
+
+  .title-display { font-size: 18px; }
+  .header-edit-btn { padding: 4px 8px; }
 
   .grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px; }
   .calendar-grid { min-width: 1100px; }
@@ -909,65 +1118,64 @@ const styles = `
   .tb-btn { padding: 6px 8px; }
 }
 
+/* ============================================================
+   PRINT — single-page tabloid landscape
+   ============================================================ */
 @media print {
-  @page { size: tabloid landscape; margin: 0.35in; }
+  @page { size: 17in 11in; margin: 0.4in; }
 
-  /* Hide all interactive chrome */
-  .toolbar, .mobile-toggle, .scroll-hint, .planner-footer { display: none !important; }
+  /* Hide all chrome */
+  .toolbar, .mobile-toggle, .scroll-hint, .planner-footer,
+  .header-edit-btn, .title-mantra-placeholder { display: none !important; }
   .month-list { display: none !important; }
   .grid-wrap { display: block !important; overflow: visible !important; }
   .grid-wrap.mobile-hide { display: block !important; }
+  .screen-only { display: none !important; }
 
-  /* Force everything onto one page */
-  html, body { height: 100%; }
+  html, body { height: 100%; margin: 0; padding: 0; }
+
   .planner-root {
     background: white;
     min-height: 0;
     height: auto;
   }
   .planner-root::before { display: none; }
+
   .printable {
     padding: 0;
     max-width: none;
     width: 100%;
+    height: 100vh;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
-  /* Compact header on one line */
+  /* Streamlined header — one tight line */
   .planner-header {
     margin: 0 0 6px;
     padding-bottom: 6px;
-    text-align: center;
+    border-bottom: 1px solid var(--rule);
+    flex-shrink: 0;
   }
-  .planner-header::after {
-    width: 40px;
-  }
-  .title-line { margin-bottom: 4px; }
+  .title-line { gap: 4px; }
   .title-display {
-    font-size: 18px !important;
-    gap: 2px 6px;
+    font-size: 14px !important;
+    line-height: 1.2 !important;
+    flex-wrap: nowrap;
   }
-  .title-input { padding: 0; }
-  .mantra-input, .mantra-static {
-    font-size: 11px !important;
-    margin: 0 auto;
-    padding: 0;
-    min-height: 0;
-  }
-  .mantra-input::placeholder { color: transparent; }
-  .mantra-input:placeholder-shown { display: none; }
 
-  /* Compact calendar — fits 12 rows in the available height */
+  /* Calendar takes the bulk of the page */
   .calendar-grid {
     border-color: #999;
     box-shadow: none;
-    flex-shrink: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
   }
   .month-row {
     min-height: 0;
-    height: 40px;
+    flex: 1;
     border-bottom-color: #ccc;
   }
   .month-label {
@@ -980,14 +1188,14 @@ const styles = `
     padding: 1px;
   }
   .day-number {
-    font-size: 7px;
+    font-size: 6.5px;
     top: 1px;
     left: 2px;
   }
-  .entry-pill {
-    font-size: 6.5px !important;
-    padding: 1px 2px !important;
-    line-height: 1.05 !important;
+  .entry-bar {
+    font-size: 7px !important;
+    height: 12px !important;
+    line-height: 12px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     box-shadow: none !important;
@@ -997,16 +1205,16 @@ const styles = `
     print-color-adjust: exact;
   }
 
-  /* Compact legend at the bottom — keep 6 columns */
+  /* Compact legend strip at the bottom (names + items only — no descriptions) */
   .legend {
-    margin-top: 8px;
+    margin-top: 6px;
     flex-shrink: 0;
   }
-  .legend-rule { margin-bottom: 6px; }
-  .legend-rule::before { font-size: 8px; top: -5px; }
-  .legend-title-bar { margin-bottom: 6px; gap: 0; }
-  .legend-title { font-size: 12px; }
-  .legend-sub { font-size: 7px; letter-spacing: 0.18em; }
+  .legend-rule, .legend-title-bar { display: none; }
+  .legend {
+    padding-top: 6px;
+    border-top: 1px solid var(--rule);
+  }
   .legend-grid {
     gap: 10px;
     grid-template-columns: repeat(6, 1fr) !important;
@@ -1017,20 +1225,15 @@ const styles = `
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .legend-header { gap: 4px; }
+  .legend-header { gap: 5px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid var(--rule-soft); }
   .legend-name, .legend-name-static {
     font-size: 10px !important;
   }
-  .legend-desc, .legend-desc-static {
-    font-size: 7.5px !important;
-    line-height: 1.3 !important;
-    min-height: 0 !important;
-    margin-bottom: 2px;
-  }
   .legend-items, .legend-items-static {
-    font-size: 7px !important;
-    line-height: 1.3 !important;
+    font-size: 7.5px !important;
+    line-height: 1.4 !important;
     min-height: 0 !important;
+    color: var(--accent);
   }
 
   /* Hide editing affordances on print */
