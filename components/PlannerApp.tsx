@@ -19,7 +19,7 @@ type Props = {
 type MobileView = 'grid' | 'list';
 
 // Adjust this to control print row height
-const ROW_HEIGHT_PRINT = 45;
+const ROW_HEIGHT_PRINT = 52;
 
 const QUARTER_STYLES_PRINT = [
   { bg: '#f5edda', border: '#d4b87a', text: '#7a5c1e', dot: '#b88a3f', rowBg: 'rgba(184,138,63,0.10)' },
