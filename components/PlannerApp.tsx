@@ -37,6 +37,23 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
     if (saved === 'grid' || saved === 'list') setMobileView(saved);
   }, []);
 
+  // Collapse min-height before print (handles both button and Cmd+P)
+  useEffect(() => {
+    const root = document.querySelector('.planner-root') as HTMLElement;
+    function beforePrint() {
+      if (root) root.style.minHeight = '0';
+    }
+    function afterPrint() {
+      if (root) root.style.minHeight = '';
+    }
+    window.addEventListener('beforeprint', beforePrint);
+    window.addEventListener('afterprint', afterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', beforePrint);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+  }, []);
+
   // Auto-resize all legend textareas whenever categories change
   useEffect(() => {
     const textareas = document.querySelectorAll<HTMLTextAreaElement>('.legend-desc, .legend-items');
@@ -215,7 +232,18 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         )}
         {!readOnly && <button className="tb-btn" onClick={() => setShowSettings(true)}><Settings size={14} /> <span className="btn-text">Settings</span></button>}
         {!readOnly && <button className="tb-btn" onClick={() => setShowShare(true)}><Share2 size={14} /> <span className="btn-text">Share</span></button>}
-        <button className="tb-btn" onClick={() => window.print()}><Printer size={14} /> <span className="btn-text">Print</span></button>
+        <button className="tb-btn" onClick={() => {
+          // Force collapse the root before printing so min-height: 100vh doesn't create a blank page
+          const root = document.querySelector('.planner-root') as HTMLElement;
+          if (root) {
+            const prev = root.style.cssText;
+            root.style.cssText = 'min-height: 0 !important; height: auto !important; background: white !important;';
+            window.print();
+            root.style.cssText = prev;
+          } else {
+            window.print();
+          }
+        }}><Printer size={14} /> <span className="btn-text">Print</span></button>
 
         <div className="mobile-toggle">
           <button className={mobileView === 'grid' ? 'active' : ''} onClick={() => setMobileViewPersisted('grid')} aria-label="Grid view" title="Year grid"><Grid3x3 size={14} /></button>
