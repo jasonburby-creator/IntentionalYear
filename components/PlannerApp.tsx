@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import NextLink from 'next/link';
 import { Plus, Download, Printer, Trash2, X, ChevronLeft, ChevronRight, Settings, Share2, LogOut, Link as LinkIcon, Check, Grid3x3, List, Info, Edit3 } from 'lucide-react';
@@ -17,6 +17,9 @@ type Props = {
 };
 
 type MobileView = 'grid' | 'list';
+
+// Adjust this to control print row height. Each +1px adds ~12px to total calendar height.
+const ROW_HEIGHT_PRINT = 45;
 
 export default function PlannerApp({ planner: initialPlanner, categories: initialCategories, entries: initialEntries, userEmail, readOnly }: Props) {
   const router = useRouter();
@@ -35,23 +38,6 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('mobileView') : null;
     if (saved === 'grid' || saved === 'list') setMobileView(saved);
-  }, []);
-
-  // Collapse min-height before print (handles both button and Cmd+P)
-  useEffect(() => {
-    const root = document.querySelector('.planner-root') as HTMLElement;
-    function beforePrint() {
-      if (root) root.style.minHeight = '0';
-    }
-    function afterPrint() {
-      if (root) root.style.minHeight = '';
-    }
-    window.addEventListener('beforeprint', beforePrint);
-    window.addEventListener('afterprint', afterPrint);
-    return () => {
-      window.removeEventListener('beforeprint', beforePrint);
-      window.removeEventListener('afterprint', afterPrint);
-    };
   }, []);
 
   // Auto-resize all legend textareas whenever categories change
@@ -232,18 +218,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         )}
         {!readOnly && <button className="tb-btn" onClick={() => setShowSettings(true)}><Settings size={14} /> <span className="btn-text">Settings</span></button>}
         {!readOnly && <button className="tb-btn" onClick={() => setShowShare(true)}><Share2 size={14} /> <span className="btn-text">Share</span></button>}
-        <button className="tb-btn" onClick={() => {
-          // Force collapse the root before printing so min-height: 100vh doesn't create a blank page
-          const root = document.querySelector('.planner-root') as HTMLElement;
-          if (root) {
-            const prev = root.style.cssText;
-            root.style.cssText = 'min-height: 0 !important; height: auto !important; background: white !important;';
-            window.print();
-            root.style.cssText = prev;
-          } else {
-            window.print();
-          }
-        }}><Printer size={14} /> <span className="btn-text">Print</span></button>
+        <button className="tb-btn" onClick={() => window.print()}><Printer size={14} /> <span className="btn-text">Print</span></button>
 
         <div className="mobile-toggle">
           <button className={mobileView === 'grid' ? 'active' : ''} onClick={() => setMobileViewPersisted('grid')} aria-label="Grid view" title="Year grid"><Grid3x3 size={14} /></button>
@@ -517,6 +492,15 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
           <span className="footer-mark">◆ {planner.year} ◆</span>
         </footer>
       </div>
+
+      {/* ── PRINT-ONLY LAYER ── Hidden on screen, shown only when printing.
+          Renders completely independently so screen min-height/layout can't interfere. */}
+      <PrintView
+        planner={planner}
+        categories={categories}
+        entries={entries}
+        rowHeightPx={ROW_HEIGHT_PRINT}
+      />
 
       {addingFor && !readOnly && (
         <EntryModal
@@ -923,6 +907,122 @@ function ShareModal({ planner, onUpdate, onClose }: {
   );
 }
 
+// ── Standalone print-only view ──────────────────────────────────────────────
+// Renders independently of the screen layout so min-height:100vh can't
+// push content to page 2. Hidden on screen via CSS, shown only in @media print.
+function PrintView({ planner, categories, entries, rowHeightPx }: {
+  planner: Planner;
+  categories: Category[];
+  entries: Entry[];
+  rowHeightPx: number;
+}) {
+  const habitsCategory = categories.find(c => c.name.toLowerCase().includes('habit'));
+  const habitItems = habitsCategory?.items || [];
+  const quarterHabits: Record<number, string> = {};
+  habitItems.filter(Boolean).forEach(item => {
+    const match = item.match(/^Q([1-4])\s*[-—–]+\s*(.+)$/i);
+    if (match) quarterHabits[parseInt(match[1])] = match[2].trim();
+  });
+
+  const qStyles = [
+    { bg: '#f5edda', border: '#d4b87a', text: '#7a5c1e', dot: '#b88a3f' },
+    { bg: '#e8f0e2', border: '#8ab07a', text: '#2a5c1e', dot: '#5b7a3a' },
+    { bg: '#e2ecf5', border: '#7aaad4', text: '#1e3a5c', dot: '#3d6b87' },
+    { bg: '#f5e8e2', border: '#d4907a', text: '#5c2a1e', dot: '#c2553c' },
+  ];
+
+  const quarterTints = [
+    'rgba(184,138,63,0.10)',
+    'rgba(91,122,58,0.10)',
+    'rgba(61,107,135,0.10)',
+    'rgba(160,100,80,0.10)',
+  ];
+
+  return (
+    <div className="print-view">
+      {/* Title */}
+      <div className="pv-header">
+        <div className="pv-title">{planner.owner_name}&apos;s {planner.title} · {planner.year}</div>
+        {planner.mantra && <div className="pv-mantra">&ldquo;{planner.mantra}&rdquo;</div>}
+      </div>
+
+      {/* Calendar */}
+      <div className="pv-calendar">
+        {MONTHS.map((m, mi) => {
+          const maxDay = daysInMonth(planner.year, mi);
+          const q = Math.floor(mi / 3);
+          const qNum = q + 1;
+          const monthEntries = entries.filter(e => e.month === mi);
+
+          // Collision detection
+          const placed: { row: number; start: number; end: number }[] = [];
+          const entryRows = monthEntries.map(entry => {
+            let row = 0;
+            while (placed.some(p => p.row === row && !(entry.end_day < p.start || entry.start_day > p.end))) row++;
+            placed.push({ row, start: entry.start_day, end: entry.end_day });
+            return row;
+          });
+
+          return (
+            <React.Fragment key={mi}>
+              {mi % 3 === 0 && (
+                <div className="pv-qdiv" style={{ background: qStyles[q].bg, borderColor: qStyles[q].border }}>
+                  <div className="pv-qdiv-dot" style={{ background: qStyles[q].dot }} />
+                  <div className="pv-qdiv-label" style={{ color: qStyles[q].text }}>
+                    Q{qNum} Habit — {quarterHabits[qNum] || 'TBD'}
+                  </div>
+                </div>
+              )}
+              <div className="pv-month" style={{ height: rowHeightPx, background: quarterTints[q] }}>
+                <div className="pv-month-label">{m}</div>
+                {Array.from({ length: 31 }).map((_, di) => {
+                  const day = di + 1;
+                  const valid = day <= maxDay;
+                  return (
+                    <div key={di} className={`pv-day${valid ? '' : ' pv-invalid'}`}>
+                      {valid && <span className="pv-daynum">{day}</span>}
+                    </div>
+                  );
+                })}
+                {monthEntries.map((entry, idx) => {
+                  const cat = categories.find(c => c.id === entry.category_id);
+                  const row = entryRows[idx];
+                  return (
+                    <div key={entry.id} className="pv-entry" style={{
+                      left: `calc(44px + ${entry.start_day - 1} * ((100% - 44px) / 31) + 1px)`,
+                      width: `calc(${entry.end_day - entry.start_day + 1} * ((100% - 44px) / 31) - 2px)`,
+                      top: 13 + row * 14,
+                      background: cat?.color || '#6b6258',
+                      color: cat?.text_color || '#fff',
+                    }}>
+                      {entry.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="pv-legend">
+        {categories.map(cat => (
+          <div key={cat.id} className="pv-cat">
+            <div className="pv-cat-header">
+              <div className="pv-cat-swatch" style={{ background: cat.color }} />
+              <div className="pv-cat-name">{cat.name}</div>
+            </div>
+            <div className="pv-cat-items">
+              {(cat.items || []).filter(Boolean).map((it, i) => <div key={i}>{it}</div>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const styles = `
 :root {
   --paper: #f5efe1;
@@ -1299,185 +1399,72 @@ const styles = `
   .tb-btn { padding: 6px 8px; }
 }
 
+/* ── Print-view: hidden on screen ── */
+.print-view { display: none; }
+
 /* ============================================================
-   PRINT — single-page tabloid landscape
-   Tabloid landscape is 17"x11" = 1224x792px at 96dpi
-   With 0.35" margins, usable area is roughly 1162x740px
-   Budget:  header 32px  +  calendar 540px  +  legend 168px = 740px
+   PRINT — uses standalone .print-view div, no screen layout interference
    ============================================================ */
 @media print {
   @page { size: 17in 11in; margin: 0.35in; }
 
-  /* Hide all chrome */
-  .toolbar, .mobile-toggle, .scroll-hint, .planner-footer,
-  .header-edit-btn, .title-mantra-placeholder { display: none !important; }
-  .month-list { display: none !important; }
-  .grid-wrap { display: block !important; overflow: visible !important; }
-  .grid-wrap.mobile-hide { display: block !important; }
-  .screen-only { display: none !important; }
-  .legend-hint { display: none !important; }
-
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: white !important;
-    height: auto !important;
-    min-height: 0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  .planner-root {
-    background: white !important;
-    background-attachment: initial !important;
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    page-break-inside: avoid !important;
+  /* Hide the entire screen app, show only print-view */
+  .planner-root { display: none !important; }
+  .print-view {
     display: block !important;
-  }
-  .planner-root::before { display: none !important; }
-
-  /* Collapse the sticky toolbar space completely */
-  .toolbar { height: 0 !important; overflow: hidden !important; padding: 0 !important; margin: 0 !important; border: none !important; }
-
-  .printable {
-    padding: 0 !important;
-    margin: 0 !important;
-    max-width: none !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    page-break-inside: avoid !important;
+    font-family: 'Inter', sans-serif;
+    color: #2a2620;
   }
 
-  .grid-wrap {
-    margin: 0 !important;
-    overflow: visible !important;
-    page-break-inside: avoid !important;
+  /* Header */
+  .pv-header { text-align: center; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid #c9bfa8; }
+  .pv-title { font-family: 'Crimson Pro', serif; font-weight: 600; font-size: 26px; letter-spacing: -0.005em; line-height: 1.2; }
+  .pv-mantra { font-family: 'Crimson Pro', serif; font-style: italic; font-size: 14px; color: #4a4238; margin-top: 2px; }
+
+  /* Quarter dividers */
+  .pv-qdiv {
+    display: flex; align-items: center; gap: 7px;
+    height: 16px; padding: 0 8px;
+    border-top: 1px solid; border-bottom: 1px solid;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .pv-qdiv-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pv-qdiv-label { font-size: 7.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+
+  /* Calendar */
+  .pv-calendar { border: 1px solid #999; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pv-month {
+    display: grid;
+    grid-template-columns: 44px repeat(31, 1fr);
+    border-bottom: 1px solid #ddd;
+    position: relative;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .pv-month-label {
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 10px;
+    letter-spacing: 0.1em; color: #4a4238;
+    background: #ede5d2; border-right: 1px solid #c9bfa8;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .pv-day { border-right: 1px solid rgba(201,191,168,0.4); position: relative; }
+  .pv-day:last-of-type { border-right: none; }
+  .pv-invalid { background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(201,191,168,0.15) 4px, rgba(201,191,168,0.15) 5px); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pv-daynum { position: absolute; top: 2px; left: 3px; font-size: 7px; font-weight: 600; color: #7a7064; }
+  .pv-entry {
+    position: absolute; height: 13px; line-height: 13px;
+    font-size: 8px; font-weight: 600; text-align: center;
+    border-radius: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    padding: 0 3px;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 
-  .calendar-grid {
-    border: 1px solid #999 !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    display: block !important;
-    page-break-inside: avoid !important;
-  }
-
-  .legend {
-    page-break-inside: avoid !important;
-    page-break-before: avoid !important;
-  }
-
-  /* Header — fixed 32px tall */
-  .planner-header {
-    margin: 0 0 6px !important;
-    padding: 0 0 6px !important;
-    border-bottom: 1px solid #c9bfa8 !important;
-    height: auto !important;
-  }
-  .title-line { gap: 6px; }
-  .title-display {
-    font-family: 'Crimson Pro', serif !important;
-    font-weight: 600 !important;
-    font-size: 26px !important;
-    line-height: 1.2 !important;
-    flex-wrap: nowrap !important;
-  }
-
-  /* Quarter dividers — show on print, just smaller */
-  .quarter-divider {
-    height: 14px !important;
-    padding: 0 6px 0 8px !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .quarter-divider-dot {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .quarter-divider-label { font-size: 7px !important; letter-spacing: 0.14em !important; }
-
-  /* Today highlight — off for print */
-  .day-cell.today { box-shadow: none !important; }
-  .day-number.today-num { color: #7a7064 !important; font-weight: 600 !important; }
-
-  /* Calendar rows — 55px each, 12 rows = 660px */
-  .month-row {
-    display: grid !important;
-    grid-template-columns: 44px repeat(31, 1fr) !important;
-    height: 55px !important;
-    min-height: 55px !important;
-    max-height: 55px !important;
-    border-bottom: 1px solid #ccc !important;
-    page-break-inside: avoid !important;
-    page-break-after: avoid !important;
-  }
-  .month-row:last-child { border-bottom: none !important; }
-  .month-label {
-    font-size: 10px !important;
-    letter-spacing: 0.1em !important;
-    padding: 0 !important;
-  }
-  .day-cell {
-    border-right-color: #ddd !important;
-    min-height: 0 !important;
-    height: 55px !important;
-    padding: 1px !important;
-  }
-  .day-number {
-    font-size: 7px !important;
-    top: 2px !important;
-    left: 3px !important;
-  }
-  .entry-bar {
-    font-size: 8.5px !important;
-    height: 14px !important;
-    line-height: 14px !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    box-shadow: none !important;
-  }
-  .entry-bar.can-wrap { height: 14px !important; max-height: 14px !important; }
-  .month-row.q0, .month-row.q1, .month-row.q2, .month-row.q3 {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  /* Legend strip at the bottom */
-  .legend {
-    margin: 8px 0 0 !important;
-    padding-top: 6px !important;
-    border-top: 1px solid #c9bfa8 !important;
-    page-break-inside: avoid;
-  }
-  .legend-rule, .legend-title-bar { display: none !important; }
-  .legend-grid {
-    gap: 12px !important;
-    grid-template-columns: repeat(6, 1fr) !important;
-  }
-  .legend-swatch {
-    width: 9px !important;
-    height: 9px !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .legend-header {
-    gap: 5px !important;
-    margin-bottom: 4px !important;
-    padding-bottom: 3px !important;
-    border-bottom: 1px solid #e0d7c0 !important;
-  }
-  .legend-name, .legend-name-static {
-    font-size: 10px !important;
-  }
-  .legend-items, .legend-items-static {
-    font-size: 7.5px !important;
-    line-height: 1.4 !important;
-    min-height: 0 !important;
-    color: #8a3a2a !important;
-  }
-  .legend-category { gap: 2px !important; }
-  .lock-mark { display: none !important; }
+  /* Legend */
+  .pv-legend { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #c9bfa8; }
+  .pv-cat-header { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #e0d7c0; }
+  .pv-cat-swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pv-cat-name { font-family: 'Fraunces', serif; font-weight: 700; font-size: 10px; color: #2a2620; }
+  .pv-cat-items { font-size: 7.5px; color: #8a3a2a; line-height: 1.4; }
+  .pv-cat-items div { margin-bottom: 1px; }
 }
 `;
