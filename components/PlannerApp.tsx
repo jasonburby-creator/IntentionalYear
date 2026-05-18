@@ -18,8 +18,143 @@ type Props = {
 
 type MobileView = 'grid' | 'list';
 
-// Adjust this to control print row height. Each +1px adds ~12px to total calendar height.
+// Adjust this to control print row height
 const ROW_HEIGHT_PRINT = 45;
+
+const QUARTER_STYLES_PRINT = [
+  { bg: '#f5edda', border: '#d4b87a', text: '#7a5c1e', dot: '#b88a3f', rowBg: 'rgba(184,138,63,0.10)' },
+  { bg: '#e8f0e2', border: '#8ab07a', text: '#2a5c1e', dot: '#5b7a3a', rowBg: 'rgba(91,122,58,0.10)' },
+  { bg: '#e2ecf5', border: '#7aaad4', text: '#1e3a5c', dot: '#3d6b87', rowBg: 'rgba(61,107,135,0.10)' },
+  { bg: '#f5e8e2', border: '#d4907a', text: '#5c2a1e', dot: '#c2553c', rowBg: 'rgba(160,100,80,0.10)' },
+];
+
+function openPrintWindow(planner: Planner, categories: Category[], entries: Entry[]) {
+  const MONTHS_P = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const ROW_H = ROW_HEIGHT_PRINT;
+  const LABEL_W = 44;
+
+  // Parse quarter habits
+  const habitsCategory = categories.find(c => c.name.toLowerCase().includes('habit'));
+  const quarterHabits: Record<number, string> = {};
+  (habitsCategory?.items || []).filter(Boolean).forEach(item => {
+    const match = item.match(/^Q([1-4])\s*[-—–]+\s*(.+)$/i);
+    if (match) quarterHabits[parseInt(match[1])] = match[2].trim();
+  });
+
+  // Build calendar HTML
+  let calendarRows = '';
+  MONTHS_P.forEach((m, mi) => {
+    const maxDay = new Date(planner.year, mi + 1, 0).getDate();
+    const q = Math.floor(mi / 3);
+    const qs = QUARTER_STYLES_PRINT[q];
+    const qNum = q + 1;
+
+    if (mi % 3 === 0) {
+      const habit = quarterHabits[qNum] || 'TBD';
+      calendarRows += `<div style="display:flex;align-items:center;gap:7px;height:16px;padding:0 8px;background:${qs.bg};border-top:1px solid ${qs.border};border-bottom:1px solid ${qs.border};">
+        <div style="width:5px;height:5px;border-radius:50%;background:${qs.dot};flex-shrink:0;"></div>
+        <div style="font-size:7.5px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:${qs.text};">Q${qNum} HABIT — ${habit}</div>
+      </div>`;
+    }
+
+    // Month row
+    const monthEntries = entries.filter(e => e.month === mi);
+    const placed: {row: number; start: number; end: number}[] = [];
+    const entryRows = monthEntries.map(entry => {
+      let row = 0;
+      while (placed.some(p => p.row === row && !(entry.end_day < p.start || entry.start_day > p.end))) row++;
+      placed.push({row, start: entry.start_day, end: entry.end_day});
+      return row;
+    });
+
+    let dayCells = `<div style="width:${LABEL_W}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:10px;font-weight:600;letter-spacing:0.1em;color:#4a4238;background:#ede5d2;border-right:1px solid #c9bfa8;">${m}</div>`;
+    for (let di = 0; di < 31; di++) {
+      const day = di + 1;
+      const valid = day <= maxDay;
+      const borderR = di < 30 ? 'border-right:1px solid rgba(201,191,168,0.4);' : '';
+      dayCells += `<div style="flex:1;position:relative;${borderR}${!valid ? 'background:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(201,191,168,0.15) 4px,rgba(201,191,168,0.15) 5px);' : ''}">
+        ${valid ? `<span style="position:absolute;top:2px;left:3px;font-size:7px;font-weight:600;color:#7a7064;">${day}</span>` : ''}
+      </div>`;
+    }
+
+    let entryBars = '';
+    monthEntries.forEach((entry, idx) => {
+      const cat = categories.find(c => c.id === entry.category_id);
+      const row = entryRows[idx];
+      const leftPct = ((entry.start_day - 1) / 31 * 100).toFixed(3);
+      const widthPct = ((entry.end_day - entry.start_day + 1) / 31 * 100).toFixed(3);
+      const topPx = 13 + row * 14;
+      entryBars += `<div style="position:absolute;left:calc(${LABEL_W}px + ${leftPct}% - ${LABEL_W * parseFloat(leftPct) / 100}px + 1px);width:calc(${widthPct}% * (100% - ${LABEL_W}px) / 100% - 2px);width:calc(${entry.end_day - entry.start_day + 1} / 31 * (100% - ${LABEL_W}px) - 2px);left:calc(${LABEL_W}px + ${entry.start_day - 1} / 31 * (100% - ${LABEL_W}px) + 1px);top:${topPx}px;height:13px;line-height:13px;background:${cat?.color || '#6b6258'};color:${cat?.text_color || '#fff'};border-radius:2px;font-size:8px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 3px;text-align:center;">${entry.label}</div>`;
+    });
+
+    calendarRows += `<div style="display:flex;height:${ROW_H}px;border-bottom:${mi < 11 ? '1px solid #ddd' : 'none'};position:relative;background:${qs.rowBg};">
+      ${dayCells}
+      ${entryBars}
+    </div>`;
+  });
+
+  // Legend
+  let legendCols = '';
+  categories.forEach(cat => {
+    const items = (cat.items || []).filter(Boolean);
+    legendCols += `<div>
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #e0d7c0;">
+        <div style="width:9px;height:9px;background:${cat.color};border-radius:2px;flex-shrink:0;"></div>
+        <span style="font-family:'Fraunces',serif;font-weight:700;font-size:10px;color:#2a2620;">${cat.name}</span>
+      </div>
+      <div style="font-size:7.5px;color:#8a3a2a;line-height:1.4;">
+        ${items.map(it => `<div>${it}</div>`).join('')}
+      </div>
+    </div>`;
+  });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${planner.owner_name}'s ${planner.title} · ${planner.year}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: 17in 11in; margin: 0.35in; }
+  body { font-family: 'Inter', sans-serif; color: #2a2620; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+</style>
+</head>
+<body>
+  <!-- Header -->
+  <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #c9bfa8;">
+    <div style="font-family:'Crimson Pro',serif;font-weight:600;font-size:26px;letter-spacing:-0.005em;line-height:1.2;">
+      ${planner.owner_name}'s ${planner.title} · ${planner.year}
+      ${planner.mantra ? `<span style="color:#c9bfa8;font-weight:300;margin:0 10px;">—</span><span style="font-style:italic;font-weight:400;color:#4a4238;">"${planner.mantra}"</span>` : ''}
+    </div>
+  </div>
+
+  <!-- Calendar -->
+  <div style="border:1px solid #999;margin-bottom:8px;">
+    ${calendarRows}
+  </div>
+
+  <!-- Legend -->
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding-top:6px;border-top:1px solid #c9bfa8;">
+    ${legendCols}
+  </div>
+
+  <script>
+    // Wait for fonts then print
+    document.fonts.ready.then(() => {
+      setTimeout(() => { window.print(); window.close(); }, 400);
+    });
+  </script>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank', 'width=1600,height=900');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+  }
+}
 
 export default function PlannerApp({ planner: initialPlanner, categories: initialCategories, entries: initialEntries, userEmail, readOnly }: Props) {
   const router = useRouter();
@@ -218,7 +353,7 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         )}
         {!readOnly && <button className="tb-btn" onClick={() => setShowSettings(true)}><Settings size={14} /> <span className="btn-text">Settings</span></button>}
         {!readOnly && <button className="tb-btn" onClick={() => setShowShare(true)}><Share2 size={14} /> <span className="btn-text">Share</span></button>}
-        <button className="tb-btn" onClick={() => window.print()}><Printer size={14} /> <span className="btn-text">Print</span></button>
+        <button className="tb-btn" onClick={() => openPrintWindow(planner, categories, entries)}><Printer size={14} /> <span className="btn-text">Print</span></button>
 
         <div className="mobile-toggle">
           <button className={mobileView === 'grid' ? 'active' : ''} onClick={() => setMobileViewPersisted('grid')} aria-label="Grid view" title="Year grid"><Grid3x3 size={14} /></button>
@@ -493,14 +628,6 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
         </footer>
       </div>
 
-      {/* ── PRINT-ONLY LAYER ── Hidden on screen, shown only when printing.
-          Renders completely independently so screen min-height/layout can't interfere. */}
-      <PrintView
-        planner={planner}
-        categories={categories}
-        entries={entries}
-        rowHeightPx={ROW_HEIGHT_PRINT}
-      />
 
       {addingFor && !readOnly && (
         <EntryModal
@@ -1400,64 +1527,5 @@ const styles = `
 }
 
 /* ── Print-view: hidden on screen ── */
-/* ── Print-view: off-screen on screen, shown in print ── */
-.print-view {
-  position: absolute;
-  left: -99999px;
-  top: 0;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-
-@media print {
-  @page { size: 17in 11in; margin: 0.35in; }
-
-  /* Hide screen app entirely, show print-view */
-  .planner-root { display: none !important; }
-  .print-view {
-    position: static !important;
-    left: auto !important;
-    top: auto !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    font-family: 'Inter', sans-serif;
-    color: #2a2620;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  /* Header */
-  .pv-header { text-align: center; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid #c9bfa8; }
-  .pv-title { font-family: 'Crimson Pro', serif; font-weight: 600; font-size: 26px; letter-spacing: -0.005em; line-height: 1.2; }
-  .pv-mantra { font-family: 'Crimson Pro', serif; font-style: italic; font-size: 14px; color: #4a4238; margin-top: 2px; }
-
-  /* Quarter dividers */
-  .pv-qdiv { display: flex; align-items: center; gap: 7px; height: 16px; padding: 0 8px; border-top: 1px solid; border-bottom: 1px solid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-qdiv-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-qdiv-label { font-size: 7.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
-
-  /* Calendar */
-  .pv-calendar { border: 1px solid #999; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-month { display: grid; grid-template-columns: 44px repeat(31, 1fr); border-bottom: 1px solid #ddd; position: relative; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-month:last-child { border-bottom: none; }
-  .pv-month-label { display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 600; font-size: 10px; letter-spacing: 0.1em; color: #4a4238; background: #ede5d2; border-right: 1px solid #c9bfa8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-day { border-right: 1px solid rgba(201,191,168,0.4); position: relative; }
-  .pv-invalid { background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(201,191,168,0.15) 4px, rgba(201,191,168,0.15) 5px); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-daynum { position: absolute; top: 2px; left: 3px; font-size: 7px; font-weight: 600; color: #7a7064; }
-  .pv-entry { position: absolute; height: 13px; line-height: 13px; font-size: 8px; font-weight: 600; text-align: center; border-radius: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 3px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-  /* Legend */
-  .pv-legend { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #c9bfa8; }
-  .pv-cat-header { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #e0d7c0; }
-  .pv-cat-swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .pv-cat-name { font-family: 'Fraunces', serif; font-weight: 700; font-size: 10px; color: #2a2620; }
-  .pv-cat-items { font-size: 7.5px; color: #8a3a2a; line-height: 1.4; }
-  .pv-cat-items div { margin-bottom: 1px; }
-}
+/* print handled via openPrintWindow() */
 `;
