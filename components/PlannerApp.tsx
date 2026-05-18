@@ -472,7 +472,12 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
                       {(cat.items || []).filter(Boolean).map((it, i) => <div key={i}>• {it}</div>)}
                     </div>
                   ) : (
-                    <textarea className="legend-items" placeholder="Items, one per line…" value={(cat.items || []).join('\n')} onChange={e => updateCategory(cat.id, { items: e.target.value.split('\n') })} onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }} />
+                    <>
+                      <textarea className="legend-items" placeholder="Items, one per line…" value={(cat.items || []).join('\n')} onChange={e => updateCategory(cat.id, { items: e.target.value.split('\n') })} onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }} />
+                      {cat.name.toLowerCase().includes('habit') && (
+                        <div className="legend-hint">Start each line with Q1 -, Q2 -, Q3 -, Q4 - to show habits on the calendar above.</div>
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -1183,6 +1188,7 @@ const styles = `
 
 .legend-items, .legend-items-static { font-size: 11px; color: var(--accent); line-height: 1.55; background: transparent; border: none; padding: 0; resize: none; font-family: inherit; width: 100%; min-height: 0; overflow: hidden; white-space: pre-wrap; font-weight: 500; }
 .legend-items:focus { outline: 1px dashed var(--rule); outline-offset: 2px; }
+.legend-hint { font-size: 10px; color: var(--ink-mute); font-style: italic; line-height: 1.4; margin-top: 4px; }
 
 .planner-footer { margin-top: 56px; text-align: center; border-top: 1px solid var(--rule); padding-top: 20px; }
 .footer-mark { font-family: 'Fraunces', serif; font-size: 12px; letter-spacing: 0.4em; color: var(--ink-mute); font-weight: 600; }
@@ -1281,6 +1287,7 @@ const styles = `
   .grid-wrap { display: block !important; overflow: visible !important; }
   .grid-wrap.mobile-hide { display: block !important; }
   .screen-only { display: none !important; }
+  .legend-hint { display: none !important; }
 
   html, body {
     margin: 0 !important;

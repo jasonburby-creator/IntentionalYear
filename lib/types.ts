@@ -47,7 +47,7 @@ export const DEFAULT_CATEGORIES: Omit<Category, 'id' | 'planner_id'>[] = [
   { name: 'Misogi',          color: '#7c5cb0', text_color: '#ffffff', description: 'One year-defining challenge. Hard enough that you\'re not sure you can do it. The thing the year is built around.', items: [], sort_order: 0 },
   { name: 'Explore 6x',      color: '#c2553c', text_color: '#ffffff', description: 'Six times this year, do something you wouldn\'t normally do. Roughly one every other month. Single days, weekends, experiments.', items: [], sort_order: 1 },
   { name: 'Mini Adventures', color: '#3d6b87', text_color: '#ffffff', description: 'Trips, getaways, weekend pilgrimages.', items: [], sort_order: 2 },
-  { name: 'Habits',          color: '#b88a3f', text_color: '#ffffff', description: 'One new habit per quarter. Not twelve at once. Stack them slowly, let each one become automatic before adding the next.', items: [], sort_order: 3 },
+  { name: 'Habits',          color: '#b88a3f', text_color: '#ffffff', description: 'One new habit per quarter. Not twelve at once. Stack them slowly, let each one become automatic before adding the next.', items: ['Q1 - TBD', 'Q2 - TBD', 'Q3 - TBD', 'Q4 - TBD'], sort_order: 3 },
   { name: 'Biz Trips',       color: '#5b7a3a', text_color: '#ffffff', description: 'Block work-related travel to see how it lays out across the year and stay in balance.', items: [], sort_order: 4 },
   { name: 'Daily Vitamins',  color: '#6b6258', text_color: '#ffffff', description: 'Small daily practices that compound. The unglamorous stuff that builds the foundation.', items: [], sort_order: 5 },
 ];
