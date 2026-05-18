@@ -10,14 +10,24 @@ body {
 }
 
 /* ── Print-view: hidden on screen, shown only when printing ── */
-.print-view { display: none; }
+.print-view {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 1560px;
+  visibility: hidden;
+}
 
 @media print {
   @page { size: 17in 11in; margin: 0.35in; }
 
   .planner-root { display: none !important; }
   .print-view {
+    position: static !important;
+    left: auto !important;
+    visibility: visible !important;
     display: block !important;
+    width: 100% !important;
     font-family: 'Inter', sans-serif;
     color: #2a2620;
     -webkit-print-color-adjust: exact;
