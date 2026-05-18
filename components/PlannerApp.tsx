@@ -275,11 +275,14 @@ export default function PlannerApp({ planner: initialPlanner, categories: initia
 
               // Parse quarter habits from the Habits category items
               // Expected format: "Q1 — Daily Sun Salutations" or "Q1 - NSNG"
-              const habitsCategory = categories.find(c => c.name === 'Habits');
+              const habitsCategory = categories.find(c =>
+                c.name === 'Habits' ||
+                c.name.toLowerCase().includes('habit')
+              );
               const habitItems = habitsCategory?.items || [];
               const quarterHabits: Record<number, string> = {};
               habitItems.filter(Boolean).forEach(item => {
-                const match = item.match(/^Q([1-4])\s*[—\-–]\s*(.+)$/i);
+                const match = item.match(/^Q([1-4])\s*[-—–]+\s*(.+)$/i);
                 if (match) quarterHabits[parseInt(match[1])] = match[2].trim();
               });
 
