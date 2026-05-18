@@ -1301,6 +1301,7 @@ const styles = `
     background: white !important;
     height: auto !important;
     min-height: 0 !important;
+    page-break-inside: avoid !important;
   }
   .planner-root::before { display: none !important; }
 
@@ -1310,6 +1311,27 @@ const styles = `
     max-width: none !important;
     width: 100% !important;
     box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  .grid-wrap {
+    margin: 0 !important;
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+  }
+
+  .calendar-grid {
+    border: 1px solid #999 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    display: block !important;
+    page-break-inside: avoid !important;
+  }
+
+  .legend {
+    page-break-inside: avoid !important;
+    page-break-before: avoid !important;
   }
 
   /* Header — fixed 32px tall */
@@ -1345,28 +1367,16 @@ const styles = `
   .day-cell.today { box-shadow: none !important; }
   .day-number.today-num { color: #7a7064 !important; font-weight: 600 !important; }
 
-  /* Calendar — explicit 36px rows (Option A) */
-  .grid-wrap {
-    margin: 0 !important;
-    overflow: visible !important;
-    page-break-inside: avoid;
-  }
-  .calendar-grid {
-    border: 1px solid #999 !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    display: block !important;
-    page-break-inside: avoid;
-  }
+  /* Calendar rows — 55px each, 12 rows = 660px */
   .month-row {
     display: grid !important;
     grid-template-columns: 44px repeat(31, 1fr) !important;
-    height: 60px !important;
-    min-height: 60px !important;
-    max-height: 60px !important;
+    height: 55px !important;
+    min-height: 55px !important;
+    max-height: 55px !important;
     border-bottom: 1px solid #ccc !important;
-    page-break-inside: avoid;
-    page-break-after: avoid;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
   }
   .month-row:last-child { border-bottom: none !important; }
   .month-label {
@@ -1377,7 +1387,7 @@ const styles = `
   .day-cell {
     border-right-color: #ddd !important;
     min-height: 0 !important;
-    height: 60px !important;
+    height: 55px !important;
     padding: 1px !important;
   }
   .day-number {
