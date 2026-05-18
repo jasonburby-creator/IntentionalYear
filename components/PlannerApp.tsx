@@ -1323,7 +1323,7 @@ const styles = `
   .title-display {
     font-family: 'Crimson Pro', serif !important;
     font-weight: 600 !important;
-    font-size: 22px !important;
+    font-size: 26px !important;
     line-height: 1.2 !important;
     flex-wrap: nowrap !important;
   }
@@ -1361,9 +1361,9 @@ const styles = `
   .month-row {
     display: grid !important;
     grid-template-columns: 44px repeat(31, 1fr) !important;
-    height: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
     border-bottom: 1px solid #ccc !important;
     page-break-inside: avoid;
     page-break-after: avoid;
@@ -1377,7 +1377,7 @@ const styles = `
   .day-cell {
     border-right-color: #ddd !important;
     min-height: 0 !important;
-    height: 36px !important;
+    height: 60px !important;
     padding: 1px !important;
   }
   .day-number {
@@ -1386,14 +1386,14 @@ const styles = `
     left: 3px !important;
   }
   .entry-bar {
-    font-size: 7.5px !important;
-    height: 11px !important;
-    line-height: 11px !important;
+    font-size: 8.5px !important;
+    height: 14px !important;
+    line-height: 14px !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     box-shadow: none !important;
   }
-  .entry-bar.can-wrap { height: 11px !important; max-height: 11px !important; }
+  .entry-bar.can-wrap { height: 14px !important; max-height: 14px !important; }
   .month-row.q0, .month-row.q1, .month-row.q2, .month-row.q3 {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
