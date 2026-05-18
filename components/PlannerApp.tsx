@@ -1293,17 +1293,25 @@ const styles = `
     margin: 0 !important;
     padding: 0 !important;
     background: white !important;
+    height: auto !important;
+    min-height: 0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
   .planner-root {
     background: white !important;
+    background-attachment: initial !important;
     height: auto !important;
     min-height: 0 !important;
+    max-height: none !important;
     page-break-inside: avoid !important;
+    display: block !important;
   }
   .planner-root::before { display: none !important; }
+
+  /* Collapse the sticky toolbar space completely */
+  .toolbar { height: 0 !important; overflow: hidden !important; padding: 0 !important; margin: 0 !important; border: none !important; }
 
   .printable {
     padding: 0 !important;
@@ -1312,7 +1320,6 @@ const styles = `
     width: 100% !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
-    overflow: hidden !important;
   }
 
   .grid-wrap {
